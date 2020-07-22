@@ -21,7 +21,7 @@ func testSwitchoverLongTransactionNoRplCheckNoSemiSync(cluster *cluster.Cluster,
 		cluster.LogPrintf(LvlErr, "%s", err)
 		return false
 	}
-	SaveMasterURL := cluster.GetMaster().URL
+	SaveMainURL := cluster.GetMain().URL
 	db, err := cluster.GetClusterProxyConn()
 	if err != nil {
 		cluster.LogPrintf(LvlErr, "%s", err)
@@ -34,17 +34,17 @@ func testSwitchoverLongTransactionNoRplCheckNoSemiSync(cluster *cluster.Cluster,
 	}
 	cluster.LogPrintf("TEST", "Waiting in some trx 12s more wait-trx  default %d ", cluster.GetWaitTrx())
 	time.Sleep(14 * time.Second)
-	cluster.LogPrintf("TEST :  Master is %s", cluster.GetMaster().URL)
+	cluster.LogPrintf("TEST :  Main is %s", cluster.GetMain().URL)
 	cluster.SwitchoverWaitTest()
-	cluster.LogPrintf("TEST : New Master  %s ", cluster.GetMaster().URL)
+	cluster.LogPrintf("TEST : New Main  %s ", cluster.GetMain().URL)
 	err = cluster.EnableSemisync()
 	if err != nil {
 		cluster.LogPrintf(LvlErr, "%s", err)
 		return false
 	}
 	time.Sleep(2 * time.Second)
-	if cluster.GetMaster().URL != SaveMasterURL {
-		cluster.LogPrintf(LvlErr, "Saved  master %s <> from master  %s  ", SaveMasterURL, cluster.GetMaster().URL)
+	if cluster.GetMain().URL != SaveMainURL {
+		cluster.LogPrintf(LvlErr, "Saved  main %s <> from main  %s  ", SaveMainURL, cluster.GetMain().URL)
 		return false
 	}
 	return true

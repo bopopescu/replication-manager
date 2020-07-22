@@ -78,37 +78,37 @@ func (repman *ReplicationManager) httpserver() {
 		negroni.Wrap(http.HandlerFunc(repman.handlerMuxClusterStatus)),
 	))
 
-	router.Handle("/api/clusters/{clusterName}/actions/master-physical-backup", negroni.New(
-		negroni.Wrap(http.HandlerFunc(repman.handlerMuxClusterMasterPhysicalBackup)),
+	router.Handle("/api/clusters/{clusterName}/actions/main-physical-backup", negroni.New(
+		negroni.Wrap(http.HandlerFunc(repman.handlerMuxClusterMainPhysicalBackup)),
 	))
 
-	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/master-status", negroni.New(
-		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServerMasterStatus)),
+	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/main-status", negroni.New(
+		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServerMainStatus)),
 	))
-	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/is-master", negroni.New(
-		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServersIsMasterStatus)),
+	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/is-main", negroni.New(
+		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServersIsMainStatus)),
 	))
-	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/is-slave", negroni.New(
-		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServersIsSlaveStatus)),
+	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/is-subordinate", negroni.New(
+		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServersIsSubordinateStatus)),
 	))
-	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/{serverPort}/is-master", negroni.New(
-		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServersPortIsMasterStatus)),
+	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/{serverPort}/is-main", negroni.New(
+		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServersPortIsMainStatus)),
 	))
-	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/{serverPort}/is-slave", negroni.New(
-		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServersPortIsSlaveStatus)),
+	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/{serverPort}/is-subordinate", negroni.New(
+		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServersPortIsSubordinateStatus)),
 	))
 	// handle API 2.0 compatibility for external checks
-	router.Handle("/clusters/{clusterName}/servers/{serverName}/master-status", negroni.New(
-		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServersIsMasterStatus)),
+	router.Handle("/clusters/{clusterName}/servers/{serverName}/main-status", negroni.New(
+		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServersIsMainStatus)),
 	))
-	router.Handle("/clusters/{clusterName}/servers/{serverName}/slave-status", negroni.New(
-		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServersIsSlaveStatus)),
+	router.Handle("/clusters/{clusterName}/servers/{serverName}/subordinate-status", negroni.New(
+		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServersIsSubordinateStatus)),
 	))
-	router.Handle("/clusters/{clusterName}/servers/{serverName}/{serverPort}/master-status", negroni.New(
-		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServersPortIsMasterStatus)),
+	router.Handle("/clusters/{clusterName}/servers/{serverName}/{serverPort}/main-status", negroni.New(
+		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServersPortIsMainStatus)),
 	))
-	router.Handle("/clusters/{clusterName}/servers/{serverName}/{serverPort}/slave-status", negroni.New(
-		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServersPortIsSlaveStatus)),
+	router.Handle("/clusters/{clusterName}/servers/{serverName}/{serverPort}/subordinate-status", negroni.New(
+		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServersPortIsSubordinateStatus)),
 	))
 
 	router.Handle("/clusters/{clusterName}/sphinx-indexes", negroni.New(

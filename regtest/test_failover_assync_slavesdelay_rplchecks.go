@@ -8,7 +8,7 @@ package regtest
 
 import "github.com/signal18/replication-manager/cluster"
 
-func testFailoverAllSlavesDelayRplChecksNoSemiSync(cluster *cluster.Cluster, conf string, test *cluster.Test) bool {
+func testFailoverAllSubordinatesDelayRplChecksNoSemiSync(cluster *cluster.Cluster, conf string, test *cluster.Test) bool {
 
 	err := cluster.DisableSemisync()
 	if err != nil {
@@ -16,18 +16,18 @@ func testFailoverAllSlavesDelayRplChecksNoSemiSync(cluster *cluster.Cluster, con
 		return false
 	}
 
-	SaveMasterURL := cluster.GetMaster().URL
-	cluster.LogPrintf("TEST", "Master is %s", cluster.GetMaster().URL)
+	SaveMainURL := cluster.GetMain().URL
+	cluster.LogPrintf("TEST", "Main is %s", cluster.GetMain().URL)
 	cluster.SetInteractive(false)
 	cluster.SetCheckFalsePositiveHeartbeat(false)
 	cluster.SetRplChecks(true)
 	cluster.SetRplMaxDelay(4)
 	cluster.SetFailoverCtr(1)
-	cluster.DelayAllSlaves()
+	cluster.DelayAllSubordinates()
 	cluster.FailoverNow()
-	cluster.LogPrintf("TEST", " New Master  %s ", cluster.GetMaster().URL)
-	if cluster.GetMaster().URL != SaveMasterURL {
-		cluster.LogPrintf(LvlErr, "Old master %s !=  New master %s  ", SaveMasterURL, cluster.GetMaster().URL)
+	cluster.LogPrintf("TEST", " New Main  %s ", cluster.GetMain().URL)
+	if cluster.GetMain().URL != SaveMainURL {
+		cluster.LogPrintf(LvlErr, "Old main %s !=  New main %s  ", SaveMainURL, cluster.GetMain().URL)
 		return false
 	}
 

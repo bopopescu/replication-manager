@@ -11,15 +11,15 @@ package cluster
 
 import "github.com/signal18/replication-manager/utils/dbhelper"
 
-func (server *ServerMonitor) WaitSyncToMaster(master *ServerMonitor) {
-	server.ClusterGroup.LogPrintf(LvlInfo, "Waiting for slave %s to sync", server.URL)
+func (server *ServerMonitor) WaitSyncToMain(main *ServerMonitor) {
+	server.ClusterGroup.LogPrintf(LvlInfo, "Waiting for subordinate %s to sync", server.URL)
 	if server.DBVersion.Flavor == "MariaDB" {
-		logs, err := dbhelper.MasterWaitGTID(server.Conn, master.GTIDBinlogPos.Sprint(), 30)
-		server.ClusterGroup.LogSQL(logs, err, server.URL, "MasterFailover", LvlErr, "Failed MasterWaitGTID, %s", err)
+		logs, err := dbhelper.MainWaitGTID(server.Conn, main.GTIDBinlogPos.Sprint(), 30)
+		server.ClusterGroup.LogSQL(logs, err, server.URL, "MainFailover", LvlErr, "Failed MainWaitGTID, %s", err)
 
 	} else {
-		logs, err := dbhelper.MasterPosWait(server.Conn, master.BinaryLogFile, master.BinaryLogPos, 30)
-		server.ClusterGroup.LogSQL(logs, err, server.URL, "MasterFailover", LvlErr, "Failed MasterPosWait, %s", err)
+		logs, err := dbhelper.MainPosWait(server.Conn, main.BinaryLogFile, main.BinaryLogPos, 30)
+		server.ClusterGroup.LogSQL(logs, err, server.URL, "MainFailover", LvlErr, "Failed MainPosWait, %s", err)
 	}
 
 	if server.ClusterGroup.Conf.LogLevel > 2 {

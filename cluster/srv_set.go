@@ -126,7 +126,7 @@ func (server *ServerMonitor) SetDSN() {
 		}
 		return dsn
 	}
-	if server.ClusterGroup.Conf.MasterSlavePgStream || server.ClusterGroup.Conf.MasterSlavePgLogical {
+	if server.ClusterGroup.Conf.MainSubordinatePgStream || server.ClusterGroup.Conf.MainSubordinatePgLogical {
 		server.DSN = pgdsn()
 	} else {
 		server.DSN = mydsn()
@@ -156,71 +156,71 @@ func (server *ServerMonitor) SetCredential(url string, user string, pass string)
 
 }
 
-func (server *ServerMonitor) SetReplicationGTIDSlavePosFromServer(master *ServerMonitor) (string, error) {
-	server.StopSlave()
+func (server *ServerMonitor) SetReplicationGTIDSubordinatePosFromServer(main *ServerMonitor) (string, error) {
+	server.StopSubordinate()
 	if server.IsMariaDB() {
-		return dbhelper.ChangeMaster(server.Conn, dbhelper.ChangeMasterOpt{
-			Host:        master.Host,
-			Port:        master.Port,
-			User:        master.ClusterGroup.rplUser,
-			Password:    master.ClusterGroup.rplPass,
-			Retry:       strconv.Itoa(master.ClusterGroup.Conf.ForceSlaveHeartbeatRetry),
-			Heartbeat:   strconv.Itoa(master.ClusterGroup.Conf.ForceSlaveHeartbeatTime),
+		return dbhelper.ChangeMain(server.Conn, dbhelper.ChangeMainOpt{
+			Host:        main.Host,
+			Port:        main.Port,
+			User:        main.ClusterGroup.rplUser,
+			Password:    main.ClusterGroup.rplPass,
+			Retry:       strconv.Itoa(main.ClusterGroup.Conf.ForceSubordinateHeartbeatRetry),
+			Heartbeat:   strconv.Itoa(main.ClusterGroup.Conf.ForceSubordinateHeartbeatTime),
 			Mode:        "SLAVE_POS",
 			SSL:         server.ClusterGroup.Conf.ReplicationSSL,
-			Channel:     server.ClusterGroup.Conf.MasterConn,
+			Channel:     server.ClusterGroup.Conf.MainConn,
 			IsDelayed:   server.IsDelayed,
 			Delay:       strconv.Itoa(server.ClusterGroup.Conf.HostsDelayedTime),
 			PostgressDB: server.PostgressDB,
 		}, server.DBVersion)
 	}
-	return dbhelper.ChangeMaster(server.Conn, dbhelper.ChangeMasterOpt{
-		Host:        master.Host,
-		Port:        master.Port,
-		User:        master.ClusterGroup.rplUser,
-		Password:    master.ClusterGroup.rplPass,
-		Retry:       strconv.Itoa(master.ClusterGroup.Conf.ForceSlaveHeartbeatRetry),
-		Heartbeat:   strconv.Itoa(master.ClusterGroup.Conf.ForceSlaveHeartbeatTime),
+	return dbhelper.ChangeMain(server.Conn, dbhelper.ChangeMainOpt{
+		Host:        main.Host,
+		Port:        main.Port,
+		User:        main.ClusterGroup.rplUser,
+		Password:    main.ClusterGroup.rplPass,
+		Retry:       strconv.Itoa(main.ClusterGroup.Conf.ForceSubordinateHeartbeatRetry),
+		Heartbeat:   strconv.Itoa(main.ClusterGroup.Conf.ForceSubordinateHeartbeatTime),
 		Mode:        "MASTER_AUTO_POSITION",
 		SSL:         server.ClusterGroup.Conf.ReplicationSSL,
-		Channel:     server.ClusterGroup.Conf.MasterConn,
+		Channel:     server.ClusterGroup.Conf.MainConn,
 		IsDelayed:   server.IsDelayed,
 		Delay:       strconv.Itoa(server.ClusterGroup.Conf.HostsDelayedTime),
 		PostgressDB: server.PostgressDB,
 	}, server.DBVersion)
 }
 
-func (server *ServerMonitor) SetReplicationGTIDCurrentPosFromServer(master *ServerMonitor) (string, error) {
+func (server *ServerMonitor) SetReplicationGTIDCurrentPosFromServer(main *ServerMonitor) (string, error) {
 	var err error
 	logs := ""
 	if server.DBVersion.IsMySQLOrPerconaGreater57() {
 		// We can do MySQL 5.7 style failover
-		server.ClusterGroup.LogPrintf(LvlInfo, "Doing MySQL GTID switch of the old master")
-		logs, err = dbhelper.ChangeMaster(server.Conn, dbhelper.ChangeMasterOpt{
-			Host:        server.ClusterGroup.master.Host,
-			Port:        server.ClusterGroup.master.Port,
+		server.ClusterGroup.LogPrintf(LvlInfo, "Doing MySQL GTID switch of the old main")
+		logs, err = dbhelper.ChangeMain(server.Conn, dbhelper.ChangeMainOpt{
+			Host:        server.ClusterGroup.main.Host,
+			Port:        server.ClusterGroup.main.Port,
 			User:        server.ClusterGroup.rplUser,
 			Password:    server.ClusterGroup.rplPass,
-			Retry:       strconv.Itoa(server.ClusterGroup.Conf.ForceSlaveHeartbeatRetry),
-			Heartbeat:   strconv.Itoa(server.ClusterGroup.Conf.ForceSlaveHeartbeatTime),
+			Retry:       strconv.Itoa(server.ClusterGroup.Conf.ForceSubordinateHeartbeatRetry),
+			Heartbeat:   strconv.Itoa(server.ClusterGroup.Conf.ForceSubordinateHeartbeatTime),
 			Mode:        "",
 			SSL:         server.ClusterGroup.Conf.ReplicationSSL,
-			Channel:     server.ClusterGroup.Conf.MasterConn,
+			Channel:     server.ClusterGroup.Conf.MainConn,
 			IsDelayed:   server.IsDelayed,
 			Delay:       strconv.Itoa(server.ClusterGroup.Conf.HostsDelayedTime),
 			PostgressDB: server.PostgressDB,
 		}, server.DBVersion)
 	} else {
-		logs, err = dbhelper.ChangeMaster(server.Conn, dbhelper.ChangeMasterOpt{
-			Host:        master.Host,
-			Port:        master.Port,
-			User:        master.ClusterGroup.rplUser,
-			Password:    master.ClusterGroup.rplPass,
-			Retry:       strconv.Itoa(master.ClusterGroup.Conf.ForceSlaveHeartbeatRetry),
-			Heartbeat:   strconv.Itoa(master.ClusterGroup.Conf.ForceSlaveHeartbeatTime),
+		logs, err = dbhelper.ChangeMain(server.Conn, dbhelper.ChangeMainOpt{
+			Host:        main.Host,
+			Port:        main.Port,
+			User:        main.ClusterGroup.rplUser,
+			Password:    main.ClusterGroup.rplPass,
+			Retry:       strconv.Itoa(main.ClusterGroup.Conf.ForceSubordinateHeartbeatRetry),
+			Heartbeat:   strconv.Itoa(main.ClusterGroup.Conf.ForceSubordinateHeartbeatTime),
 			Mode:        "CURRENT_POS",
 			SSL:         server.ClusterGroup.Conf.ReplicationSSL,
-			Channel:     server.ClusterGroup.Conf.MasterConn,
+			Channel:     server.ClusterGroup.Conf.MainConn,
 			IsDelayed:   server.IsDelayed,
 			Delay:       strconv.Itoa(server.ClusterGroup.Conf.HostsDelayedTime),
 			PostgressDB: server.PostgressDB,
@@ -229,24 +229,24 @@ func (server *ServerMonitor) SetReplicationGTIDCurrentPosFromServer(master *Serv
 	return logs, err
 }
 
-func (server *ServerMonitor) SetReplicationFromMaxsaleServer(master *ServerMonitor) (string, error) {
-	return dbhelper.ChangeMaster(server.Conn, dbhelper.ChangeMasterOpt{
-		Host:      master.Host,
-		Port:      master.Port,
-		User:      master.ClusterGroup.rplUser,
-		Password:  master.ClusterGroup.rplPass,
-		Retry:     strconv.Itoa(master.ClusterGroup.Conf.ForceSlaveHeartbeatRetry),
-		Heartbeat: strconv.Itoa(master.ClusterGroup.Conf.ForceSlaveHeartbeatTime),
+func (server *ServerMonitor) SetReplicationFromMaxsaleServer(main *ServerMonitor) (string, error) {
+	return dbhelper.ChangeMain(server.Conn, dbhelper.ChangeMainOpt{
+		Host:      main.Host,
+		Port:      main.Port,
+		User:      main.ClusterGroup.rplUser,
+		Password:  main.ClusterGroup.rplPass,
+		Retry:     strconv.Itoa(main.ClusterGroup.Conf.ForceSubordinateHeartbeatRetry),
+		Heartbeat: strconv.Itoa(main.ClusterGroup.Conf.ForceSubordinateHeartbeatTime),
 		Mode:      "MXS",
-		Logfile:   master.FailoverMasterLogFile,
-		Logpos:    master.FailoverMasterLogPos,
+		Logfile:   main.FailoverMainLogFile,
+		Logpos:    main.FailoverMainLogPos,
 	}, server.DBVersion)
 }
 
 func (server *ServerMonitor) SetReplicationChannel(source string) (string, error) {
 	logs := ""
 	if server.DBVersion.IsMariaDB() {
-		logs, err := dbhelper.SetDefaultMasterConn(server.Conn, source, server.DBVersion)
+		logs, err := dbhelper.SetDefaultMainConn(server.Conn, source, server.DBVersion)
 		if err != nil {
 			return logs, err
 		}

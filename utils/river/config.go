@@ -14,19 +14,19 @@ type SourceConfig struct {
 type Index struct {
 	Sql         string `toml:"sql"`
 	Triggers    string `toml:"triggers"`
-	CloudTable  string `toml:"slave_table"`
-	CloudSchema string `toml:"slave_schema"`
+	CloudTable  string `toml:"subordinate_table"`
+	CloudSchema string `toml:"subordinate_schema"`
 }
 
 type Config struct {
-	MyHost        string `toml:"master_host"`
-	MyUser        string `toml:"master_user"`
-	MyPassword    string `toml:"master_password"`
-	SlaveHost     string `toml:"slave_host"`
-	SlaveUser     string `toml:"slave_user"`
-	SlavePassword string `toml:"slave_password"`
+	MyHost        string `toml:"main_host"`
+	MyUser        string `toml:"main_user"`
+	MyPassword    string `toml:"main_password"`
+	SubordinateHost     string `toml:"subordinate_host"`
+	SubordinateUser     string `toml:"subordinate_user"`
+	SubordinatePassword string `toml:"subordinate_password"`
 
-	MyFlavor string `toml:"master_flavor"`
+	MyFlavor string `toml:"main_flavor"`
 
 	DumpPath     string         `toml:"dump_path"`
 	DumpServerID uint32         `toml:"dump_server_id"`

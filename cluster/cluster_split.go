@@ -62,11 +62,11 @@ func (cl *Cluster) ArbitratorElection() error {
 		return nil
 	}
 	var mst string
-	if cl.GetMaster() != nil {
-		mst = cl.GetMaster().URL
+	if cl.GetMain() != nil {
+		mst = cl.GetMain().URL
 	}
 
-	var jsonStr = []byte(`{"uuid":"` + cl.runUUID + `","secret":"` + cl.Conf.ArbitrationSasSecret + `","cluster":"` + cl.GetName() + `","master":"` + mst + `","id":` + strconv.Itoa(cl.Conf.ArbitrationSasUniqueId) + `,"status":"` + cl.Status + `","hosts":` + strconv.Itoa(len(cl.GetServers())) + `,"failed":` + strconv.Itoa(cl.CountFailed(cl.GetServers())) + `}`)
+	var jsonStr = []byte(`{"uuid":"` + cl.runUUID + `","secret":"` + cl.Conf.ArbitrationSasSecret + `","cluster":"` + cl.GetName() + `","main":"` + mst + `","id":` + strconv.Itoa(cl.Conf.ArbitrationSasUniqueId) + `,"status":"` + cl.Status + `","hosts":` + strconv.Itoa(len(cl.GetServers())) + `,"failed":` + strconv.Itoa(cl.CountFailed(cl.GetServers())) + `}`)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonStr))
 	if err != nil {
 		cl.LogPrintf("ERROR", "Could not create http request to arbitrator: %s", err)
@@ -88,7 +88,7 @@ func (cl *Cluster) ArbitratorElection() error {
 
 	type response struct {
 		Arbitration string `json:"arbitration"`
-		Master      string `json:"master"`
+		Main      string `json:"main"`
 	}
 	var r response
 	err = json.Unmarshal(body, &r)
@@ -105,11 +105,11 @@ func (cl *Cluster) ArbitratorElection() error {
 	} else {
 		cl.SetActiveStatus(ConstMonitorStandby)
 		cl.SetState("ERR00068", state.State{ErrType: "ERROR", ErrDesc: fmt.Sprintf(clusterError["ERR00068"]), ErrFrom: "ARB"})
-		if cl.GetMaster() != nil {
-			mst = cl.GetMaster().URL
-			if r.Master != mst {
-				cl.LostArbitration(r.Master)
-				cl.LogPrintf("INFO", "Election Lost - Current master %s different from winner master %s, %s is split brain victim. ", mst, r.Master, mst)
+		if cl.GetMain() != nil {
+			mst = cl.GetMain().URL
+			if r.Main != mst {
+				cl.LostArbitration(r.Main)
+				cl.LogPrintf("INFO", "Election Lost - Current main %s different from winner main %s, %s is split brain victim. ", mst, r.Main, mst)
 			}
 		}
 	}

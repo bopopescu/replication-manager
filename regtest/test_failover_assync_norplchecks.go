@@ -16,16 +16,16 @@ func testFailoverNoRplChecksNoSemiSync(cluster *cluster.Cluster, conf string, te
 		cluster.LogPrintf("ERROR:", "%s", err)
 		return false
 	}
-	SaveMasterURL := cluster.GetMaster().URL
+	SaveMainURL := cluster.GetMain().URL
 
-	cluster.LogPrintf("TEST", "Master is %s", cluster.GetMaster().URL)
+	cluster.LogPrintf("TEST", "Main is %s", cluster.GetMain().URL)
 	cluster.SetInteractive(false)
 	cluster.SetCheckFalsePositiveHeartbeat(false)
 	cluster.SetRplChecks(false)
 	cluster.FailoverAndWait()
-	cluster.LogPrintf("TEST", "New Master  %s ", cluster.GetMaster().URL)
-	if cluster.GetMaster().URL == SaveMasterURL {
-		cluster.LogPrintf(LvlErr, "Old master %s ==  Next master %s  ", SaveMasterURL, cluster.GetMaster().URL)
+	cluster.LogPrintf("TEST", "New Main  %s ", cluster.GetMain().URL)
+	if cluster.GetMain().URL == SaveMainURL {
+		cluster.LogPrintf(LvlErr, "Old main %s ==  Next main %s  ", SaveMainURL, cluster.GetMain().URL)
 		return false
 	}
 

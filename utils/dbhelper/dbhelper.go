@@ -163,44 +163,44 @@ type LogSlow struct {
 	Digest         string
 }
 
-type SlaveHosts struct {
+type SubordinateHosts struct {
 	Server_id uint64 `json:"serverId"`
 	Host      string `json:"host"`
 	Port      uint   `json:"port"`
-	Master_id uint64 `json:"masterId"`
+	Main_id uint64 `json:"mainId"`
 }
 
-type MasterStatus struct {
+type MainStatus struct {
 	File             string `json:"file"`
 	Position         uint   `json:"position"`
 	Binlog_Do_DB     string `json:"binlogDoDB"`
 	Binlog_Ignore_DB string `json:"binlogIgnoreDB"`
 }
 
-type SlaveStatus struct {
+type SubordinateStatus struct {
 	ConnectionName       sql.NullString `db:"Connection_name" json:"connectionName"`
-	MasterHost           sql.NullString `db:"Master_Host" json:"masterHost"`
-	MasterUser           sql.NullString `db:"Master_User" json:"masterUser"`
-	MasterPort           sql.NullString `db:"Master_Port" json:"masterPort"`
-	MasterLogFile        sql.NullString `db:"Master_Log_File" json:"masterLogFile"`
-	ReadMasterLogPos     sql.NullString `db:"Read_Master_Log_Pos" json:"readMasterLogPos"`
-	RelayMasterLogFile   sql.NullString `db:"Relay_Master_Log_File" json:"relayMasterLogFile"`
-	SlaveIORunning       sql.NullString `db:"Slave_IO_Running" json:"slaveIoRunning"`
-	SlaveSQLRunning      sql.NullString `db:"Slave_SQL_Running" json:"slaveSqlRunning"`
-	ExecMasterLogPos     sql.NullString `db:"Exec_Master_Log_Pos" json:"execMasterLogPos"`
-	SecondsBehindMaster  sql.NullInt64  `db:"Seconds_Behind_Master" json:"secondsBehindMaster"`
+	MainHost           sql.NullString `db:"Main_Host" json:"mainHost"`
+	MainUser           sql.NullString `db:"Main_User" json:"mainUser"`
+	MainPort           sql.NullString `db:"Main_Port" json:"mainPort"`
+	MainLogFile        sql.NullString `db:"Main_Log_File" json:"mainLogFile"`
+	ReadMainLogPos     sql.NullString `db:"Read_Main_Log_Pos" json:"readMainLogPos"`
+	RelayMainLogFile   sql.NullString `db:"Relay_Main_Log_File" json:"relayMainLogFile"`
+	SubordinateIORunning       sql.NullString `db:"Subordinate_IO_Running" json:"subordinateIoRunning"`
+	SubordinateSQLRunning      sql.NullString `db:"Subordinate_SQL_Running" json:"subordinateSqlRunning"`
+	ExecMainLogPos     sql.NullString `db:"Exec_Main_Log_Pos" json:"execMainLogPos"`
+	SecondsBehindMain  sql.NullInt64  `db:"Seconds_Behind_Main" json:"secondsBehindMain"`
 	LastIOErrno          sql.NullString `db:"Last_IO_Errno" json:"lastIoErrno"`
 	LastIOError          sql.NullString `db:"Last_IO_Error" json:"lastIoError"`
 	LastSQLErrno         sql.NullString `db:"Last_SQL_Errno" json:"lastSqlErrno"`
 	LastSQLError         sql.NullString `db:"Last_SQL_Error" json:"lastSqlError"`
-	MasterServerID       uint64         `db:"Master_Server_Id" json:"masterServerId"`
+	MainServerID       uint64         `db:"Main_Server_Id" json:"mainServerId"`
 	UsingGtid            sql.NullString `db:"Using_Gtid" json:"usingGtid"`
 	GtidIOPos            sql.NullString `db:"Gtid_IO_Pos" json:"gtidIoPos"`
-	GtidSlavePos         sql.NullString `db:"Gtid_Slave_Pos" json:"gtidSlavePos"`
-	SlaveHeartbeatPeriod float64        `db:"Slave_Heartbeat_Period" json:"slaveHeartbeatPeriod"`
+	GtidSubordinatePos         sql.NullString `db:"Gtid_Subordinate_Pos" json:"gtidSubordinatePos"`
+	SubordinateHeartbeatPeriod float64        `db:"Subordinate_Heartbeat_Period" json:"subordinateHeartbeatPeriod"`
 	ExecutedGtidSet      sql.NullString `db:"Executed_Gtid_Set" json:"executedGtidSet"`
 	RetrievedGtidSet     sql.NullString `db:"Retrieved_Gtid_Set" json:"retrievedGtidSet"`
-	SlaveSQLRunningState sql.NullString `db:"Slave_SQL_Running_State" json:"slaveSQLRunningState"`
+	SubordinateSQLRunningState sql.NullString `db:"Subordinate_SQL_Running_State" json:"subordinateSQLRunningState"`
 	PGExternalID         sql.NullString `db:"external_id" json:"postgresExternalId"`
 }
 
@@ -208,7 +208,7 @@ type Privileges struct {
 	Select_priv      string `json:"selectPriv"`
 	Process_priv     string `json:"processPriv"`
 	Super_priv       string `json:"superPriv"`
-	Repl_slave_priv  string `json:"replSlavePriv"`
+	Repl_subordinate_priv  string `json:"replSubordinatePriv"`
 	Repl_client_priv string `json:"replClientPriv"`
 	Reload_priv      string `json:"reloadPriv"`
 }
@@ -534,7 +534,7 @@ func GetMaxscaleVersion(db *sqlx.DB) (string, error) {
 	return value, err
 }
 
-type ChangeMasterOpt struct {
+type ChangeMainOpt struct {
 	Host      string
 	Port      string
 	User      string
@@ -555,7 +555,7 @@ type ChangeMasterOpt struct {
 	//	SSLKey    string
 }
 
-func ChangeMaster(db *sqlx.DB, opt ChangeMasterOpt, myver *MySQLVersion) (string, error) {
+func ChangeMain(db *sqlx.DB, opt ChangeMainOpt, myver *MySQLVersion) (string, error) {
 	//CREATE PUBLICATION alltables FOR ALL TABLES;
 	cm := ""
 	if myver.IsPPostgreSQL() {
@@ -569,9 +569,9 @@ func ChangeMaster(db *sqlx.DB, opt ChangeMasterOpt, myver *MySQLVersion) (string
 		if myver.IsMariaDB() && opt.Channel != "" {
 			cm += " '" + opt.Channel + "'"
 		}
-		cm += " TO master_host='" + misc.Unbracket(opt.Host) + "', master_port=" + opt.Port + ", master_user='" + opt.User + "', master_password='" + opt.Password + "', master_connect_retry=" + opt.Retry + ", master_heartbeat_period=" + opt.Heartbeat
+		cm += " TO main_host='" + misc.Unbracket(opt.Host) + "', main_port=" + opt.Port + ", main_user='" + opt.User + "', main_password='" + opt.Password + "', main_connect_retry=" + opt.Retry + ", main_heartbeat_period=" + opt.Heartbeat
 		if opt.IsDelayed {
-			cm += " ,master_delay=" + opt.Delay
+			cm += " ,main_delay=" + opt.Delay
 		}
 		switch opt.Mode {
 		case "SLAVE_POS":
@@ -579,9 +579,9 @@ func ChangeMaster(db *sqlx.DB, opt ChangeMasterOpt, myver *MySQLVersion) (string
 		case "CURRENT_POS":
 			cm += ", MASTER_USE_GTID=CURRENT_POS"
 		case "MXS":
-			cm += ", master_log_file='" + opt.Logfile + "', master_log_pos=" + opt.Logpos
+			cm += ", main_log_file='" + opt.Logfile + "', main_log_pos=" + opt.Logpos
 		case "POSITIONAL":
-			cm += ", master_log_file='" + opt.Logfile + "', master_log_pos=" + opt.Logpos
+			cm += ", main_log_file='" + opt.Logfile + "', main_log_pos=" + opt.Logpos
 			if myver.IsMariaDB() {
 				cm += ", MASTER_USE_GTID=NO"
 			}
@@ -599,7 +599,7 @@ func ChangeMaster(db *sqlx.DB, opt ChangeMasterOpt, myver *MySQLVersion) (string
 	_, err := db.Exec(cm)
 	cm = strings.Replace(cm, opt.Password, "XXX", -1)
 	if err != nil {
-		return cm, fmt.Errorf("Change master statement %s failed, reason: %s", cm, err)
+		return cm, fmt.Errorf("Change main statement %s failed, reason: %s", cm, err)
 	}
 	return cm, nil
 }
@@ -690,7 +690,7 @@ func GetPrivileges(db *sqlx.DB, user string, host string, ip string, myver *MySQ
 		iprange3 := splitip[0] + ":" + splitip[1] + ":" + splitip[2] + ":%"
 
 		if myver.IsPPostgreSQL() {
-			stmt = `SELECT 'Y' as "Select_priv" ,'Y'  as "Process_priv",  CASE WHEN u.usesuper THEN 'Y' ELSE 'N' END  as "Super_priv",  CASE WHEN  u.userepl THEN 'Y' ELSE 'N' END as "Repl_slave_priv", CASE WHEN  u.userepl THEN 'Y' ELSE 'N' END as "Repl_client_priv" ,CASE WHEN u.usesuper THEN 'Y' ELSE 'N' END as "Reload_priv" FROM pg_catalog.pg_user u WHERE u.usename = '` + user + `'`
+			stmt = `SELECT 'Y' as "Select_priv" ,'Y'  as "Process_priv",  CASE WHEN u.usesuper THEN 'Y' ELSE 'N' END  as "Super_priv",  CASE WHEN  u.userepl THEN 'Y' ELSE 'N' END as "Repl_subordinate_priv", CASE WHEN  u.userepl THEN 'Y' ELSE 'N' END as "Repl_client_priv" ,CASE WHEN u.usesuper THEN 'Y' ELSE 'N' END as "Reload_priv" FROM pg_catalog.pg_user u WHERE u.usename = '` + user + `'`
 			row := db.QueryRowx(stmt)
 			err = row.StructScan(&priv)
 			if err != nil && strings.Contains(err.Error(), "unsupported Scan") {
@@ -698,7 +698,7 @@ func GetPrivileges(db *sqlx.DB, user string, host string, ip string, myver *MySQ
 			}
 
 		} else {
-			stmt = "SELECT MAX(Select_priv) as Select_priv, MAX(Process_priv) as Process_priv, MAX(Super_priv) as Super_priv, MAX(Repl_slave_priv) as Repl_slave_priv, MAX(Repl_client_priv) as Repl_client_priv, MAX(Reload_priv) as Reload_priv FROM mysql.user WHERE user = ? AND host IN(?,?,?,?,?,?,?,?,?)"
+			stmt = "SELECT MAX(Select_priv) as Select_priv, MAX(Process_priv) as Process_priv, MAX(Super_priv) as Super_priv, MAX(Repl_subordinate_priv) as Repl_subordinate_priv, MAX(Repl_client_priv) as Repl_client_priv, MAX(Reload_priv) as Reload_priv FROM mysql.user WHERE user = ? AND host IN(?,?,?,?,?,?,?,?,?)"
 			row := db.QueryRowx(stmt, user, host, ip, "::", ip+"/255.0.0.0", ip+"/255.255.0.0", ip+"/255:255.255.0", iprange1, iprange2, iprange3)
 			err = row.StructScan(&priv)
 			if err != nil && strings.Contains(err.Error(), "unsupported Scan") {
@@ -714,7 +714,7 @@ func GetPrivileges(db *sqlx.DB, user string, host string, ip string, myver *MySQ
 	iprange3 := splitip[0] + "." + splitip[1] + "." + splitip[2] + ".%"
 
 	if myver.IsPPostgreSQL() {
-		stmt = `SELECT 'Y' as "Select_priv" ,'Y'  as "Process_priv",  CASE WHEN u.usesuper THEN 'Y' ELSE 'N' END  as "Super_priv",  CASE WHEN  u.userepl THEN 'Y' ELSE 'N' END as "Repl_slave_priv", CASE WHEN  u.userepl THEN 'Y' ELSE 'N' END as "Repl_client_priv" ,CASE WHEN u.usesuper THEN 'Y' ELSE 'N' END as "Reload_priv" FROM pg_catalog.pg_user u WHERE u.usename = '` + user + `'`
+		stmt = `SELECT 'Y' as "Select_priv" ,'Y'  as "Process_priv",  CASE WHEN u.usesuper THEN 'Y' ELSE 'N' END  as "Super_priv",  CASE WHEN  u.userepl THEN 'Y' ELSE 'N' END as "Repl_subordinate_priv", CASE WHEN  u.userepl THEN 'Y' ELSE 'N' END as "Repl_client_priv" ,CASE WHEN u.usesuper THEN 'Y' ELSE 'N' END as "Reload_priv" FROM pg_catalog.pg_user u WHERE u.usename = '` + user + `'`
 		row := db.QueryRowx(stmt)
 		err = row.StructScan(&priv)
 		if err != nil && strings.Contains(err.Error(), "unsupported Scan") {
@@ -722,7 +722,7 @@ func GetPrivileges(db *sqlx.DB, user string, host string, ip string, myver *MySQ
 		}
 
 	} else {
-		stmt := "SELECT MAX(Select_priv) as Select_priv, MAX(Process_priv) as Process_priv, MAX(Super_priv) as Super_priv, MAX(Repl_slave_priv) as Repl_slave_priv, MAX(Repl_client_priv) as Repl_client_priv, MAX(Reload_priv) as Reload_priv FROM mysql.user WHERE user = ? AND host IN(?,?,?,?,?,?,?,?,?)"
+		stmt := "SELECT MAX(Select_priv) as Select_priv, MAX(Process_priv) as Process_priv, MAX(Super_priv) as Super_priv, MAX(Repl_subordinate_priv) as Repl_subordinate_priv, MAX(Repl_client_priv) as Repl_client_priv, MAX(Reload_priv) as Reload_priv FROM mysql.user WHERE user = ? AND host IN(?,?,?,?,?,?,?,?,?)"
 		row := db.QueryRowx(stmt, user, host, ip, "%", ip+"/255.0.0.0", ip+"/255.255.0.0", ip+"/255.255.255.0", iprange1, iprange2, iprange3)
 		err = row.StructScan(&priv)
 		if err != nil && strings.Contains(err.Error(), "unsupported Scan") {
@@ -798,11 +798,11 @@ func HaveExtraEvents(db *sqlx.DB, file string, pos string) (bool, string, error)
 	return false, stmt, nil
 }
 
-func GetSlaveStatus(db *sqlx.DB, Channel string, myver *MySQLVersion) (SlaveStatus, string, error) {
+func GetSubordinateStatus(db *sqlx.DB, Channel string, myver *MySQLVersion) (SubordinateStatus, string, error) {
 	db.MapperFunc(strings.Title)
 	var err error
 	udb := db.Unsafe()
-	ss := SlaveStatus{}
+	ss := SubordinateStatus{}
 	query := ""
 	if Channel == "" {
 
@@ -810,32 +810,32 @@ func GetSlaveStatus(db *sqlx.DB, Channel string, myver *MySQLVersion) (SlaveStat
 		if myver.IsPPostgreSQL() {
 			/*		query = `select
 						received_lsn ,subname "Connection_name",
-						pg_walfile_name(received_lsn) as "Master_Log_File",
-						(SELECT file_offset  FROM pg_walfile_name_offset(received_lsn)) as "Master_Log_Pos" ,
-						CASE WHEN latest_end_lsn = received_lsn   THEN 0 ELSE EXTRACT(EPOCH FROM latest_end_time -last_msg_send_time) END AS "Seconds_Behind_Master"
+						pg_walfile_name(received_lsn) as "Main_Log_File",
+						(SELECT file_offset  FROM pg_walfile_name_offset(received_lsn)) as "Main_Log_Pos" ,
+						CASE WHEN latest_end_lsn = received_lsn   THEN 0 ELSE EXTRACT(EPOCH FROM latest_end_time -last_msg_send_time) END AS "Seconds_Behind_Main"
 					from pg_catalog.pg_stat_subscription`
 			*/
 			query = `SELECT
 							ss.subname as "Connection_name",
-							ltrim((regexp_split_to_array(s.subconninfo, '\s+'))[2],'host=') as "Master_Host",
-							ltrim((regexp_split_to_array(s.subconninfo, '\s+'))[4],'port=') as "Master_Port",
-							ltrim((regexp_split_to_array(s.subconninfo, '\s+'))[3],'user=') as "Master_User",
-							'master.' || pg_walfile_name(ss.received_lsn) as "Master_Log_File",
-							(SELECT file_offset  FROM pg_walfile_name_offset(ss.received_lsn)) as "Read_Master_Log_Pos" ,
-							'master.' || pg_walfile_name(ss.latest_end_lsn) as "Relay_Master_Log_File",
-							CASE WHEN s.subenabled THEN 'Yes' ELSE 'No' END as "Slave_IO_Running"  ,
-							CASE WHEN s.subenabled THEN 'Yes' ELSE 'No' END as "Slave_SQL_Running",
-								(SELECT file_offset  FROM pg_walfile_name_offset(ss.latest_end_lsn)) as "Exec_Master_Log_Pos",
-							CASE WHEN latest_end_lsn = received_lsn  THEN 0 ELSE EXTRACT(EPOCH FROM latest_end_time -last_msg_send_time) END AS "Seconds_Behind_Master",
+							ltrim((regexp_split_to_array(s.subconninfo, '\s+'))[2],'host=') as "Main_Host",
+							ltrim((regexp_split_to_array(s.subconninfo, '\s+'))[4],'port=') as "Main_Port",
+							ltrim((regexp_split_to_array(s.subconninfo, '\s+'))[3],'user=') as "Main_User",
+							'main.' || pg_walfile_name(ss.received_lsn) as "Main_Log_File",
+							(SELECT file_offset  FROM pg_walfile_name_offset(ss.received_lsn)) as "Read_Main_Log_Pos" ,
+							'main.' || pg_walfile_name(ss.latest_end_lsn) as "Relay_Main_Log_File",
+							CASE WHEN s.subenabled THEN 'Yes' ELSE 'No' END as "Subordinate_IO_Running"  ,
+							CASE WHEN s.subenabled THEN 'Yes' ELSE 'No' END as "Subordinate_SQL_Running",
+								(SELECT file_offset  FROM pg_walfile_name_offset(ss.latest_end_lsn)) as "Exec_Main_Log_Pos",
+							CASE WHEN latest_end_lsn = received_lsn  THEN 0 ELSE EXTRACT(EPOCH FROM latest_end_time -last_msg_send_time) END AS "Seconds_Behind_Main",
 							'' as  "Last_IO_Errno",
 							'' as "Last_SQL_Errno",
 							'' as "Last_SQL_Error" ,
-							0 "Master_Server_Id",
-							'Slave_Pos' as  "Using_Gtid" ,
+							0 "Main_Server_Id",
+							'Subordinate_Pos' as  "Using_Gtid" ,
 							'0-0-' || ('x'|| replace(text(ss.received_lsn), '/' ,''))::bit(64)::bigint  as  "Gtid_IO_Pos" ,
-							'0-0-' || ('x'|| replace(text(ss.latest_end_lsn), '/' ,''))::bit(64)::bigint as "Gtid_Slave_Pos" ,
-							1 as "Slave_Heartbeat_Period" ,
-							'' as "Slave_SQL_Running_State",
+							'0-0-' || ('x'|| replace(text(ss.latest_end_lsn), '/' ,''))::bit(64)::bigint as "Gtid_Subordinate_Pos" ,
+							1 as "Subordinate_Heartbeat_Period" ,
+							'' as "Subordinate_SQL_Running_State",
 							ros.external_id
 						FROM pg_replication_origin_status ros
 							LEFT JOIN (
@@ -861,18 +861,18 @@ func GetSlaveStatus(db *sqlx.DB, Channel string, myver *MySQLVersion) (SlaveStat
 	return ss, query, err
 }
 
-func GetChannelSlaveStatus(db *sqlx.DB, myver *MySQLVersion) ([]SlaveStatus, string, error) {
+func GetChannelSubordinateStatus(db *sqlx.DB, myver *MySQLVersion) ([]SubordinateStatus, string, error) {
 	db.MapperFunc(strings.Title)
 	udb := db.Unsafe()
-	ss := []SlaveStatus{}
+	ss := []SubordinateStatus{}
 	err := udb.Select(&ss, "SHOW SLAVE STATUS")
 	return ss, "SHOW SLAVE STATUS", err
 }
 
-func GetPGSlaveStatus(db *sqlx.DB, myver *MySQLVersion) ([]SlaveStatus, error) {
+func GetPGSubordinateStatus(db *sqlx.DB, myver *MySQLVersion) ([]SubordinateStatus, error) {
 	db.MapperFunc(strings.Title)
 	udb := db.Unsafe()
-	ss := []SlaveStatus{}
+	ss := []SubordinateStatus{}
 	query := `SELECT usename, application_name,
 			COALESCE(client_hostname::text, client_addr::text, ''),
 			COALESCE(EXTRACT(EPOCH FROM backend_start)::bigint, 0),
@@ -903,18 +903,18 @@ func GetDisks(db *sqlx.DB, myver *MySQLVersion) ([]Disk, string, error) {
 	return ss, query, err
 }
 
-func GetMSlaveStatus(db *sqlx.DB, conn string, myver *MySQLVersion) (SlaveStatus, string, error) {
+func GetMSubordinateStatus(db *sqlx.DB, conn string, myver *MySQLVersion) (SubordinateStatus, string, error) {
 
-	s := SlaveStatus{}
-	ss := []SlaveStatus{}
+	s := SubordinateStatus{}
+	ss := []SubordinateStatus{}
 	var err error
 	logs := ""
 
 	if myver.IsMariaDB() || myver.IsPPostgreSQL() {
-		ss, logs, err = GetAllSlavesStatus(db, myver)
+		ss, logs, err = GetAllSubordinatesStatus(db, myver)
 	} else {
-		var s SlaveStatus
-		s, logs, err = GetSlaveStatus(db, conn, myver)
+		var s SubordinateStatus
+		s, logs, err = GetSubordinateStatus(db, conn, myver)
 		ss = append(ss, s)
 	}
 
@@ -926,10 +926,10 @@ func GetMSlaveStatus(db *sqlx.DB, conn string, myver *MySQLVersion) (SlaveStatus
 	return s, logs, err
 }
 
-func GetAllSlavesStatus(db *sqlx.DB, myver *MySQLVersion) ([]SlaveStatus, string, error) {
+func GetAllSubordinatesStatus(db *sqlx.DB, myver *MySQLVersion) ([]SubordinateStatus, string, error) {
 	db.MapperFunc(strings.Title)
 	udb := db.Unsafe()
-	ss := []SlaveStatus{}
+	ss := []SubordinateStatus{}
 	var err error
 	/*
 
@@ -937,30 +937,30 @@ func GetAllSlavesStatus(db *sqlx.DB, myver *MySQLVersion) ([]SlaveStatus, string
 
 
 
-		   type SlaveStatus struct {
+		   type SubordinateStatus struct {
 		   	ConnectionName       sql.NullString `db:"Connection_name" json:"connectionName"`
-		   	MasterHost           sql.NullString `db:"Master_Host" json:"masterHost"`
-		   	MasterUser           sql.NullString `db:"Master_User" json:"masterUser"`
-		   	MasterPort           sql.NullString `db:"Master_Port" json:"masterPort"`
-		   	MasterLogFile        sql.NullString `db:"Master_Log_File" json:"masterLogFile"`
-		   	ReadMasterLogPos     sql.NullString `db:"Read_Master_Log_Pos" json:"readMasterLogPos"`
-		   	RelayMasterLogFile   sql.NullString `db:"Relay_Master_Log_File" json:"relayMasterLogFile"`
-		   	SlaveIORunning       sql.NullString `db:"Slave_IO_Running" json:"slaveIoRunning"`
-		   	SlaveSQLRunning      sql.NullString `db:"Slave_SQL_Running" json:"slaveSqlRunning"`
-		   	ExecMasterLogPos     sql.NullString `db:"Exec_Master_Log_Pos" json:"execMasterLogPos"`
-		   	SecondsBehindMaster  sql.NullInt64  `db:"Seconds_Behind_Master" json:"secondsBehindMaster"`
+		   	MainHost           sql.NullString `db:"Main_Host" json:"mainHost"`
+		   	MainUser           sql.NullString `db:"Main_User" json:"mainUser"`
+		   	MainPort           sql.NullString `db:"Main_Port" json:"mainPort"`
+		   	MainLogFile        sql.NullString `db:"Main_Log_File" json:"mainLogFile"`
+		   	ReadMainLogPos     sql.NullString `db:"Read_Main_Log_Pos" json:"readMainLogPos"`
+		   	RelayMainLogFile   sql.NullString `db:"Relay_Main_Log_File" json:"relayMainLogFile"`
+		   	SubordinateIORunning       sql.NullString `db:"Subordinate_IO_Running" json:"subordinateIoRunning"`
+		   	SubordinateSQLRunning      sql.NullString `db:"Subordinate_SQL_Running" json:"subordinateSqlRunning"`
+		   	ExecMainLogPos     sql.NullString `db:"Exec_Main_Log_Pos" json:"execMainLogPos"`
+		   	SecondsBehindMain  sql.NullInt64  `db:"Seconds_Behind_Main" json:"secondsBehindMain"`
 		   	LastIOErrno          sql.NullString `db:"Last_IO_Errno" json:"lastIoErrno"`
 		   	LastIOError          sql.NullString `db:"Last_IO_Error" json:"lastIoError"`
 		   	LastSQLErrno         sql.NullString `db:"Last_SQL_Errno" json:"lastSqlErrno"`
 		   	LastSQLError         sql.NullString `db:"Last_SQL_Error" json:"lastSqlError"`
-		   	MasterServerID       uint           `db:"Master_Server_Id" json:"masterServerId"`
+		   	MainServerID       uint           `db:"Main_Server_Id" json:"mainServerId"`
 		   	UsingGtid            sql.NullString `db:"Using_Gtid" json:"usingGtid"`
 		   	GtidIOPos            sql.NullString `db:"Gtid_IO_Pos" json:"gtidIoPos"`
-		   	GtidSlavePos         sql.NullString `db:"Gtid_Slave_Pos" json:"gtidSlavePos"`
-		   	SlaveHeartbeatPeriod float64        `db:"Slave_Heartbeat_Period" json:"slaveHeartbeatPeriod"`
+		   	GtidSubordinatePos         sql.NullString `db:"Gtid_Subordinate_Pos" json:"gtidSubordinatePos"`
+		   	SubordinateHeartbeatPeriod float64        `db:"Subordinate_Heartbeat_Period" json:"subordinateHeartbeatPeriod"`
 		   	ExecutedGtidSet      sql.NullString `db:"Executed_Gtid_Set" json:"executedGtidSet"`
 		   	RetrievedGtidSet     sql.NullString `db:"Retrieved_Gtid_Set" json:"retrievedGtidSet"`
-		   	SlaveSQLRunningState sql.NullString `db:"Slave_SQL_Running_State" json:"slaveSQLRunningState"`
+		   	SubordinateSQLRunningState sql.NullString `db:"Subordinate_SQL_Running_State" json:"subordinateSQLRunningState"`
 
 				select * from pg_replication_origin_status
 
@@ -972,25 +972,25 @@ func GetAllSlavesStatus(db *sqlx.DB, myver *MySQLVersion) ([]SlaveStatus, string
 	if myver.IsPPostgreSQL() {
 		query = `SELECT
 								ss.subname as "Connection_name",
-								ltrim((regexp_split_to_array(s.subconninfo, '\s+'))[2],'host=') as "Master_Host",
-								ltrim((regexp_split_to_array(s.subconninfo, '\s+'))[4],'port=') as "Master_Port",
-								ltrim((regexp_split_to_array(s.subconninfo, '\s+'))[3],'user=') as "Master_User",
-								'master.' || pg_walfile_name(ss.received_lsn) as "Master_Log_File",
-								(SELECT file_offset  FROM pg_walfile_name_offset(ss.received_lsn)) as "Read_Master_Log_Pos" ,
-								'master.' || pg_walfile_name(ss.latest_end_lsn) as "Relay_Master_Log_File",
-								CASE WHEN s.subenabled THEN 'Yes' ELSE 'No' END as "Slave_IO_Running"  ,
-								CASE WHEN s.subenabled THEN 'Yes' ELSE 'No' END as "Slave_SQL_Running",
-									(SELECT file_offset  FROM pg_walfile_name_offset(ss.latest_end_lsn)) as "Exec_Master_Log_Pos",
-								CASE WHEN latest_end_lsn = received_lsn  THEN 0 ELSE EXTRACT(EPOCH FROM latest_end_time -last_msg_send_time) END AS "Seconds_Behind_Master",
+								ltrim((regexp_split_to_array(s.subconninfo, '\s+'))[2],'host=') as "Main_Host",
+								ltrim((regexp_split_to_array(s.subconninfo, '\s+'))[4],'port=') as "Main_Port",
+								ltrim((regexp_split_to_array(s.subconninfo, '\s+'))[3],'user=') as "Main_User",
+								'main.' || pg_walfile_name(ss.received_lsn) as "Main_Log_File",
+								(SELECT file_offset  FROM pg_walfile_name_offset(ss.received_lsn)) as "Read_Main_Log_Pos" ,
+								'main.' || pg_walfile_name(ss.latest_end_lsn) as "Relay_Main_Log_File",
+								CASE WHEN s.subenabled THEN 'Yes' ELSE 'No' END as "Subordinate_IO_Running"  ,
+								CASE WHEN s.subenabled THEN 'Yes' ELSE 'No' END as "Subordinate_SQL_Running",
+									(SELECT file_offset  FROM pg_walfile_name_offset(ss.latest_end_lsn)) as "Exec_Main_Log_Pos",
+								CASE WHEN latest_end_lsn = received_lsn  THEN 0 ELSE EXTRACT(EPOCH FROM latest_end_time -last_msg_send_time) END AS "Seconds_Behind_Main",
 								'' as  "Last_IO_Errno",
 							  '' as "Last_SQL_Errno",
 								'' as "Last_SQL_Error" ,
-								0 "Master_Server_Id",
-							  'Slave_Pos' as  "Using_Gtid" ,
+								0 "Main_Server_Id",
+							  'Subordinate_Pos' as  "Using_Gtid" ,
 								'0-0-' || ('x'|| replace(text(ss.received_lsn), '/' ,''))::bit(64)::bigint  as  "Gtid_IO_Pos" ,
-								'0-0-' || ('x'|| replace(text(ss.latest_end_lsn), '/' ,''))::bit(64)::bigint as "Gtid_Slave_Pos" ,
-								1 as "Slave_Heartbeat_Period" ,
-								'' as "Slave_SQL_Running_State",
+								'0-0-' || ('x'|| replace(text(ss.latest_end_lsn), '/' ,''))::bit(64)::bigint as "Gtid_Subordinate_Pos" ,
+								1 as "Subordinate_Heartbeat_Period" ,
+								'' as "Subordinate_SQL_Running_State",
 								ros.external_id
 							FROM pg_replication_origin_status ros
 							  LEFT JOIN (
@@ -1005,19 +1005,19 @@ func GetAllSlavesStatus(db *sqlx.DB, myver *MySQLVersion) ([]SlaveStatus, string
 	return ss, query, err
 }
 
-func SetMultiSourceRepl(db *sqlx.DB, master_host string, master_port string, master_user string, master_password string, master_filter string) (string, error) {
+func SetMultiSourceRepl(db *sqlx.DB, main_host string, main_port string, main_user string, main_password string, main_filter string) (string, error) {
 	crcTable := crc64.MakeTable(crc64.ECMA) // http://golang.org/pkg/hash/crc64/#pkg-constants
-	checksum64 := fmt.Sprintf("%d", crc64.Checksum([]byte(master_host+":"+master_port), crcTable))
+	checksum64 := fmt.Sprintf("%d", crc64.Checksum([]byte(main_host+":"+main_port), crcTable))
 
-	stmt := "CHANGE MASTER 'mrm_" + checksum64 + "' TO master_host='" + misc.Unbracket(master_host) + "', master_port=" + master_port + ", master_user='" + master_user + "', master_password='" + master_password + "' , master_use_gtid=slave_pos"
+	stmt := "CHANGE MASTER 'mrm_" + checksum64 + "' TO main_host='" + misc.Unbracket(main_host) + "', main_port=" + main_port + ", main_user='" + main_user + "', main_password='" + main_password + "' , main_use_gtid=subordinate_pos"
 	logs := stmt
 	_, err := db.Exec(stmt)
 	if err != nil {
 		return logs, err
 	}
-	if master_filter != "" {
+	if main_filter != "" {
 
-		stmt = "SET GLOBAL mrm_" + checksum64 + ".replicate_do_table='" + master_filter + "'"
+		stmt = "SET GLOBAL mrm_" + checksum64 + ".replicate_do_table='" + main_filter + "'"
 		logs += "\n" + stmt
 		_, err = db.Exec(stmt)
 		if err != nil {
@@ -1035,25 +1035,25 @@ func SetMultiSourceRepl(db *sqlx.DB, master_host string, master_port string, mas
 }
 
 func InstallSemiSync(db *sqlx.DB) (string, error) {
-	stmt := "INSTALL PLUGIN rpl_semi_sync_slave SONAME 'semisync_slave.so'"
+	stmt := "INSTALL PLUGIN rpl_semi_sync_subordinate SONAME 'semisync_subordinate.so'"
 	logs := stmt
 	_, err := db.Exec(stmt)
 	if err != nil {
 		return logs, err
 	}
-	stmt = "INSTALL PLUGIN rpl_semi_sync_master SONAME 'semisync_master.so'"
+	stmt = "INSTALL PLUGIN rpl_semi_sync_main SONAME 'semisync_main.so'"
 	logs += "\n" + stmt
 	_, err = db.Exec(stmt)
 	if err != nil {
 		return logs, err
 	}
-	stmt = "set global rpl_semi_sync_master_enabled='ON'"
+	stmt = "set global rpl_semi_sync_main_enabled='ON'"
 	logs += "\n" + stmt
 	_, err = db.Exec(stmt)
 	if err != nil {
 		return logs, err
 	}
-	stmt = "set global rpl_semi_sync_slave_enabled='ON'"
+	stmt = "set global rpl_semi_sync_subordinate_enabled='ON'"
 	logs += "\n" + stmt
 	_, err = db.Exec(stmt)
 	if err != nil {
@@ -1131,7 +1131,7 @@ func SetRelayLogSpaceLimit(db *sqlx.DB, size string) (string, error) {
 
 // SetBinlogSlowqueries Enable queries in replication to be reported in slow queries
 func SetBinlogSlowqueries(db *sqlx.DB) (string, error) {
-	query := "SET GLOBAL log_slow_slave_statements=ON"
+	query := "SET GLOBAL log_slow_subordinate_statements=ON"
 	_, err := db.Exec(query)
 	if err != nil {
 		return query, err
@@ -1168,7 +1168,7 @@ func SetSyncInnodb(db *sqlx.DB) (string, error) {
 	return query, nil
 }
 
-// SetBinlogChecksum Enable binlog checksum and check on master
+// SetBinlogChecksum Enable binlog checksum and check on main
 func SetBinlogChecksum(db *sqlx.DB) (string, error) {
 	query := "SET GLOBAL binlog_checksum=1"
 	logs := query
@@ -1177,7 +1177,7 @@ func SetBinlogChecksum(db *sqlx.DB) (string, error) {
 		return query, err
 	}
 
-	query = "SET GLOBAL master_verify_checksum=1"
+	query = "SET GLOBAL main_verify_checksum=1"
 	logs += "\n" + query
 	_, err = db.Exec(query)
 	if err != nil {
@@ -1214,17 +1214,17 @@ func SetSlowQueryLogOff(db *sqlx.DB) (string, error) {
 	return query, nil
 }
 
-func ResetAllSlaves(db *sqlx.DB, myver *MySQLVersion) (string, error) {
+func ResetAllSubordinates(db *sqlx.DB, myver *MySQLVersion) (string, error) {
 
-	ss := []SlaveStatus{}
+	ss := []SubordinateStatus{}
 	var err error
 	logs := ""
 
 	if myver.IsMariaDB() {
-		ss, logs, err = GetAllSlavesStatus(db, myver)
+		ss, logs, err = GetAllSubordinatesStatus(db, myver)
 	} else {
-		var s SlaveStatus
-		s, logs, err = GetSlaveStatus(db, "", myver)
+		var s SubordinateStatus
+		s, logs, err = GetSubordinateStatus(db, "", myver)
 		ss = append(ss, s)
 	}
 	if err != nil {
@@ -1233,17 +1233,17 @@ func ResetAllSlaves(db *sqlx.DB, myver *MySQLVersion) (string, error) {
 
 	for _, src := range ss {
 
-		log, err := SetDefaultMasterConn(db, src.ConnectionName.String, myver)
+		log, err := SetDefaultMainConn(db, src.ConnectionName.String, myver)
 		logs += "\n" + log
 		if err != nil {
 			return logs, err
 		}
 
 		if myver.IsMySQLOrPercona() {
-			log, _ = StopSlave(db, src.ConnectionName.String, myver)
+			log, _ = StopSubordinate(db, src.ConnectionName.String, myver)
 			logs += "\n" + log
 		}
-		log, err = ResetSlave(db, true, src.ConnectionName.String, myver)
+		log, err = ResetSubordinate(db, true, src.ConnectionName.String, myver)
 		logs += "\n" + log
 		if err != nil {
 			return logs, err
@@ -1252,14 +1252,14 @@ func ResetAllSlaves(db *sqlx.DB, myver *MySQLVersion) (string, error) {
 	return logs, err
 }
 
-func GetMasterStatus(db *sqlx.DB, myver *MySQLVersion) (MasterStatus, string, error) {
+func GetMainStatus(db *sqlx.DB, myver *MySQLVersion) (MainStatus, string, error) {
 	db.MapperFunc(strings.Title)
-	ms := MasterStatus{}
+	ms := MainStatus{}
 	udb := db.Unsafe()
 	query := "SHOW MASTER STATUS"
 	if myver.IsPPostgreSQL() {
 		query = `select
-		 	 'master.' ||	pg_walfile_name(pg_current_wal_lsn()) as "File" ,
+		 	 'main.' ||	pg_walfile_name(pg_current_wal_lsn()) as "File" ,
 				(SELECT file_offset  FROM pg_walfile_name_offset(pg_current_wal_lsn())) as "Position" ,
 				'' as Binlog_Do_DB ,
 				'' as "Binlog_Ignore_DB"`
@@ -1273,11 +1273,11 @@ func GetMasterStatus(db *sqlx.DB, myver *MySQLVersion) (MasterStatus, string, er
 	return ms, query, err
 }
 
-func GetSlaveHosts(db *sqlx.DB) (map[string]interface{}, string, error) {
+func GetSubordinateHosts(db *sqlx.DB) (map[string]interface{}, string, error) {
 	query := "SHOW SLAVE HOSTS"
 	rows, err := db.Queryx(query)
 	if err != nil {
-		return nil, query, errors.New("Could not get slave hosts")
+		return nil, query, errors.New("Could not get subordinate hosts")
 	}
 	defer rows.Close()
 	results := make(map[string]interface{})
@@ -1290,25 +1290,25 @@ func GetSlaveHosts(db *sqlx.DB) (map[string]interface{}, string, error) {
 	return results, query, nil
 }
 
-func GetSlaveHostsArray(db *sqlx.DB) ([]SlaveHosts, string, error) {
-	sh := []SlaveHosts{}
+func GetSubordinateHostsArray(db *sqlx.DB) ([]SubordinateHosts, string, error) {
+	sh := []SubordinateHosts{}
 	query := "SHOW SLAVE HOSTS"
 	err := db.Select(&sh, query)
 	if err != nil {
-		return nil, query, errors.New("Could not get slave hosts array")
+		return nil, query, errors.New("Could not get subordinate hosts array")
 	}
 	return sh, query, nil
 }
 
-func GetSlaveHostsDiscovery(db *sqlx.DB) ([]string, string, error) {
-	slaveList := []string{}
+func GetSubordinateHostsDiscovery(db *sqlx.DB) ([]string, string, error) {
+	subordinateList := []string{}
 	/* This method does not return the server ports, so we cannot rely on it for the time being. */
 	query := "select host from information_schema.processlist where command ='binlog dump'"
-	err := db.Select(&slaveList, query)
+	err := db.Select(&subordinateList, query)
 	if err != nil {
-		return nil, query, errors.New("Could not get slave hosts from the processlist")
+		return nil, query, errors.New("Could not get subordinate hosts from the processlist")
 	}
-	return slaveList, query, nil
+	return subordinateList, query, nil
 }
 
 func GetEventStatus(db *sqlx.DB, version *MySQLVersion) ([]Event, string, error) {
@@ -1372,7 +1372,7 @@ func GetStatus(db *sqlx.DB, myver *MySQLVersion) (map[string]string, string, err
 			UNION ALL SELECT 'HANDLER_READ_RND_NEXT' as "variable_name",SUM(tup_fetched)::text as "value" FROM pg_stat_database
 			UNION ALL SELECT 'CREATED_TMP_TABLES' as "variable_name",SUM(temp_files)::text as  "value" FROM pg_stat_database
 			UNION ALL SELECT 'ROWS_SENT' as "variable_name",SUM(tup_returned)::text as  "value" FROM pg_stat_database
-			UNION ALL SELECT 'UPTIME' as "variable_name", EXTRACT(EPOCH FROM pg_postmaster_start_time())::bigint::text  as  "value"
+			UNION ALL SELECT 'UPTIME' as "variable_name", EXTRACT(EPOCH FROM pg_postmain_start_time())::bigint::text  as  "value"
 			UNION ALL SELECT 'THREADS_CONNECTED' as "VARIABLE_NAME",  sum(numbackends)::text  as  "value" FROM pg_stat_database
 			 `
 	}
@@ -1796,7 +1796,7 @@ func UnlockTables(db *sqlx.DB) (string, error) {
 	return query, err
 }
 
-func StopSlave(db *sqlx.DB, Channel string, myver *MySQLVersion) (string, error) {
+func StopSubordinate(db *sqlx.DB, Channel string, myver *MySQLVersion) (string, error) {
 	cmd := ""
 	if myver.IsPPostgreSQL() {
 		if Channel == "" {
@@ -1816,7 +1816,7 @@ func StopSlave(db *sqlx.DB, Channel string, myver *MySQLVersion) (string, error)
 	return cmd, err
 }
 
-func StopSlaveIOThread(db *sqlx.DB, Channel string, myver *MySQLVersion) (string, error) {
+func StopSubordinateIOThread(db *sqlx.DB, Channel string, myver *MySQLVersion) (string, error) {
 	cmd := "STOP SLAVE IO_THREAD"
 	if myver.IsMariaDB() && Channel != "" {
 		cmd = "STOP SLAVE '" + Channel + "'  IO_THREAD"
@@ -1827,7 +1827,7 @@ func StopSlaveIOThread(db *sqlx.DB, Channel string, myver *MySQLVersion) (string
 	_, err := db.Exec(cmd)
 	return cmd, err
 }
-func StopSlaveSQLThread(db *sqlx.DB, Channel string, myver *MySQLVersion) (string, error) {
+func StopSubordinateSQLThread(db *sqlx.DB, Channel string, myver *MySQLVersion) (string, error) {
 	cmd := "STOP SLAVE SQL_THREAD"
 	if myver.IsMariaDB() && Channel != "" {
 		cmd = "STOP SLAVE '" + Channel + "' SQL_THREAD"
@@ -1839,23 +1839,23 @@ func StopSlaveSQLThread(db *sqlx.DB, Channel string, myver *MySQLVersion) (strin
 	return cmd, err
 }
 
-func SetSlaveHeartbeat(db *sqlx.DB, interval string, Channel string, myver *MySQLVersion) (string, error) {
+func SetSubordinateHeartbeat(db *sqlx.DB, interval string, Channel string, myver *MySQLVersion) (string, error) {
 	var err error
 	logs := ""
 	log := ""
-	log, err = StopSlave(db, Channel, myver)
+	log, err = StopSubordinate(db, Channel, myver)
 	logs += log
 	if err != nil {
 		return logs, err
 	}
-	stmt := "change master to MASTER_HEARTBEAT_PERIOD=" + interval
+	stmt := "change main to MASTER_HEARTBEAT_PERIOD=" + interval
 	logs += "\n" + stmt
 	_, err = db.Exec(stmt)
 
 	if err != nil {
 		return logs, err
 	}
-	log, err = StartSlave(db, Channel, myver)
+	log, err = StartSubordinate(db, Channel, myver)
 	logs += "\n" + stmt
 	if err != nil {
 		return logs, err
@@ -1863,22 +1863,22 @@ func SetSlaveHeartbeat(db *sqlx.DB, interval string, Channel string, myver *MySQ
 	return logs, err
 }
 
-func SetSlaveGTIDMode(db *sqlx.DB, mode string, Channel string, myver *MySQLVersion) (string, error) {
+func SetSubordinateGTIDMode(db *sqlx.DB, mode string, Channel string, myver *MySQLVersion) (string, error) {
 	var err error
 	logs := ""
 	log := ""
-	logs, err = StopSlave(db, Channel, myver)
+	logs, err = StopSubordinate(db, Channel, myver)
 	logs += log
 	if err != nil {
 		return logs, err
 	}
-	stmt := "change master to master_use_gtid=" + mode
+	stmt := "change main to main_use_gtid=" + mode
 	logs += "\n" + stmt
 	_, err = db.Exec(stmt)
 	if err != nil {
 		return logs, err
 	}
-	log, err = StartSlave(db, Channel, myver)
+	log, err = StartSubordinate(db, Channel, myver)
 	logs += "\n" + stmt
 	if err != nil {
 		return logs, err
@@ -1886,8 +1886,8 @@ func SetSlaveGTIDMode(db *sqlx.DB, mode string, Channel string, myver *MySQLVers
 	return logs, err
 }
 
-func SetGTIDSlavePos(db *sqlx.DB, gtid string) (string, error) {
-	query := "SET GLOBAL gtid_slave_pos='" + gtid + "'"
+func SetGTIDSubordinatePos(db *sqlx.DB, gtid string) (string, error) {
+	query := "SET GLOBAL gtid_subordinate_pos='" + gtid + "'"
 	_, err := db.Exec(query)
 	return query, err
 }
@@ -1906,7 +1906,7 @@ func SetMaxConnections(db *sqlx.DB, connections string, myver *MySQLVersion) (st
 	return query, err
 }
 
-func SetSlaveGTIDModeStrict(db *sqlx.DB, myver *MySQLVersion) (string, error) {
+func SetSubordinateGTIDModeStrict(db *sqlx.DB, myver *MySQLVersion) (string, error) {
 	var err error
 	stmt := ""
 	//MySQL is strict per default with GTID tracking gap trx
@@ -1920,25 +1920,25 @@ func SetSlaveGTIDModeStrict(db *sqlx.DB, myver *MySQLVersion) (string, error) {
 	return stmt, nil
 }
 
-func StopAllSlaves(db *sqlx.DB, myver *MySQLVersion) (string, error) {
+func StopAllSubordinates(db *sqlx.DB, myver *MySQLVersion) (string, error) {
 	_, err := db.Exec("STOP ALL SLAVES")
 	return "STOP ALL SLAVES", err
 }
 
 func SkipBinlogEvent(db *sqlx.DB, Channel string, myver *MySQLVersion) (string, error) {
 	if myver.IsMariaDB() {
-		stmt := "SET @@default_master_connection='" + Channel + "'"
+		stmt := "SET @@default_main_connection='" + Channel + "'"
 		_, err := db.Exec(stmt)
 		if err != nil {
 			return stmt, err
 		}
 	}
-	query := "SET GLOBAL sql_slave_skip_counter=1"
+	query := "SET GLOBAL sql_subordinate_skip_counter=1"
 	_, err := db.Exec(query)
 	return query, err
 }
 
-func StartSlave(db *sqlx.DB, Channel string, myver *MySQLVersion) (string, error) {
+func StartSubordinate(db *sqlx.DB, Channel string, myver *MySQLVersion) (string, error) {
 	cmd := ""
 	if myver.IsPPostgreSQL() {
 		if Channel == "" {
@@ -1958,7 +1958,7 @@ func StartSlave(db *sqlx.DB, Channel string, myver *MySQLVersion) (string, error
 	return cmd, err
 }
 
-func ResetSlave(db *sqlx.DB, all bool, Channel string, myver *MySQLVersion) (string, error) {
+func ResetSubordinate(db *sqlx.DB, all bool, Channel string, myver *MySQLVersion) (string, error) {
 	stmt := ""
 	if myver.IsPPostgreSQL() {
 		if Channel == "" {
@@ -1981,7 +1981,7 @@ func ResetSlave(db *sqlx.DB, all bool, Channel string, myver *MySQLVersion) (str
 	return stmt, err
 }
 
-func ResetMaster(db *sqlx.DB, Channel string, myver *MySQLVersion) (string, error) {
+func ResetMain(db *sqlx.DB, Channel string, myver *MySQLVersion) (string, error) {
 	stmt := ""
 	if myver.IsPPostgreSQL() {
 		if Channel == "" {
@@ -2009,10 +2009,10 @@ func PostgresGetChannel(db *sqlx.DB, myver *MySQLVersion) (string, string, error
 
 }
 
-func SetDefaultMasterConn(db *sqlx.DB, dmc string, myver *MySQLVersion) (string, error) {
+func SetDefaultMainConn(db *sqlx.DB, dmc string, myver *MySQLVersion) (string, error) {
 
 	if myver.IsMariaDB() {
-		stmt := "SET @@default_master_connection='" + dmc + "'"
+		stmt := "SET @@default_main_connection='" + dmc + "'"
 		_, err := db.Exec(stmt)
 		return stmt, err
 	}
@@ -2020,20 +2020,20 @@ func SetDefaultMasterConn(db *sqlx.DB, dmc string, myver *MySQLVersion) (string,
 	return "", nil
 }
 
-/* Check for a list of slave prerequisites.
-- Slave is connected
+/* Check for a list of subordinate prerequisites.
+- Subordinate is connected
 - Binary log on
-- Connected to master
+- Connected to main
 - No replication filters
 */
-func CheckSlavePrerequisites(db *sqlx.DB, s string, myver *MySQLVersion) bool {
+func CheckSubordinatePrerequisites(db *sqlx.DB, s string, myver *MySQLVersion) bool {
 	if debug {
-		log.Printf("CheckSlavePrerequisites called") // remove those warnings !!
+		log.Printf("CheckSubordinatePrerequisites called") // remove those warnings !!
 	}
 	err := db.Ping()
-	/* If slave is not online, skip to next iteration */
+	/* If subordinate is not online, skip to next iteration */
 	if err != nil {
-		log.Printf("WARN : Slave %s is offline. Skipping", s)
+		log.Printf("WARN : Subordinate %s is offline. Skipping", s)
 		return false
 	}
 	vars, _, _ := GetVariables(db, myver)
@@ -2046,16 +2046,16 @@ func CheckSlavePrerequisites(db *sqlx.DB, s string, myver *MySQLVersion) bool {
 func CheckBinlogFilters(m *sqlx.DB, s *sqlx.DB, myver *MySQLVersion) (bool, string, error) {
 	logs := ""
 
-	ms, log, err := GetMasterStatus(m, myver)
+	ms, log, err := GetMainStatus(m, myver)
 	logs += log
 	if err != nil {
-		return false, log, errors.New("Cannot check binlog status on master")
+		return false, log, errors.New("Cannot check binlog status on main")
 	}
 
-	ss, log, err := GetMasterStatus(s, myver)
+	ss, log, err := GetMainStatus(s, myver)
 	logs += "\n" + log
 	if err != nil {
-		return false, logs, errors.New("ERROR: Can't check binlog status on slave")
+		return false, logs, errors.New("ERROR: Can't check binlog status on subordinate")
 	}
 	if ms.Binlog_Do_DB == ss.Binlog_Do_DB && ms.Binlog_Ignore_DB == ss.Binlog_Ignore_DB {
 		return true, logs, nil
@@ -2094,10 +2094,10 @@ func SetEventScheduler(db *sqlx.DB, state bool, myver *MySQLVersion) (string, er
 	return stmt, err
 }
 
-/* Check if a slave is in sync with his master */
-func CheckSlaveSync(dbS *sqlx.DB, dbM *sqlx.DB, myver *MySQLVersion) bool {
+/* Check if a subordinate is in sync with his main */
+func CheckSubordinateSync(dbS *sqlx.DB, dbM *sqlx.DB, myver *MySQLVersion) bool {
 	if debug {
-		log.Printf("CheckSlaveSync called")
+		log.Printf("CheckSubordinateSync called")
 	}
 	sGtid, _, _ := GetVariableByName(dbS, "GTID_CURRENT_POS", myver)
 	mGtid, _, _ := GetVariableByName(dbM, "GTID_CURRENT_POS", myver)
@@ -2108,9 +2108,9 @@ func CheckSlaveSync(dbS *sqlx.DB, dbM *sqlx.DB, myver *MySQLVersion) bool {
 	}
 }
 
-func CheckSlaveSemiSync(dbS *sqlx.DB, myver *MySQLVersion) bool {
+func CheckSubordinateSemiSync(dbS *sqlx.DB, myver *MySQLVersion) bool {
 	if debug {
-		log.Printf("CheckSlaveSemiSync called")
+		log.Printf("CheckSubordinateSemiSync called")
 	}
 	sync, _, _ := GetVariableByName(dbS, "RPL_SEMI_SYNC_SLAVE_STATUS", myver)
 
@@ -2121,13 +2121,13 @@ func CheckSlaveSemiSync(dbS *sqlx.DB, myver *MySQLVersion) bool {
 	}
 }
 
-func MasterWaitGTID(db *sqlx.DB, gtid string, timeout int) (string, error) {
+func MainWaitGTID(db *sqlx.DB, gtid string, timeout int) (string, error) {
 	query := "SELECT MASTER_GTID_WAIT(?, ?)"
 	_, err := db.Exec(query, gtid, timeout)
 	return query + "(" + gtid + "-" + strconv.Itoa(timeout) + ")", err
 }
 
-func MasterPosWait(db *sqlx.DB, log string, pos string, timeout int) (string, error) {
+func MainPosWait(db *sqlx.DB, log string, pos string, timeout int) (string, error) {
 	query := "SELECT MASTER_POS_WAIT(?, ?, ?)"
 	_, err := db.Exec(query, log, pos, timeout)
 	return query + "(" + log + "-" + pos + "-" + strconv.Itoa(timeout) + ")", err

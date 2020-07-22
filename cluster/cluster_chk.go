@@ -28,23 +28,23 @@ func (cluster *Cluster) CheckFailed() {
 		cluster.sme.AddState("ERR00001", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["ERR00001"]), ErrFrom: "CHECK"})
 		return
 	}
-	if cluster.master != nil {
-		if cluster.isFoundCandidateMaster() {
+	if cluster.main != nil {
+		if cluster.isFoundCandidateMain() {
 			if cluster.isBetweenFailoverTimeValid() {
 				if cluster.IsNotHavingMySQLErrantTransaction() {
 					if cluster.IsSameWsrepUUID() {
-						if cluster.isMaxMasterFailedCountReached() {
+						if cluster.isMaxMainFailedCountReached() {
 							if cluster.isActiveArbitration() {
 								if cluster.isMaxClusterFailoverCountNotReached() {
 									if cluster.isAutomaticFailover() {
-										if cluster.isMasterFailed() {
-											if cluster.isNotFirstSlave() {
+										if cluster.isMainFailed() {
+											if cluster.isNotFirstSubordinate() {
 
 												// False Positive
 												if cluster.isExternalOk() == false {
-													if cluster.isOneSlaveHeartbeatIncreasing() == false {
+													if cluster.isOneSubordinateHeartbeatIncreasing() == false {
 														if cluster.isMaxscaleSupectRunning() == false {
-															cluster.MasterFailover(true)
+															cluster.MainFailover(true)
 															cluster.failoverCond.Send <- true
 														}
 													}
@@ -60,17 +60,17 @@ func (cluster *Cluster) CheckFailed() {
 			}
 		}
 	} else {
-		cluster.LogPrintf(LvlDbg, "Master not discovered, skipping failover check")
+		cluster.LogPrintf(LvlDbg, "Main not discovered, skipping failover check")
 	}
 }
 
-func (cluster *Cluster) isSlaveElectableForSwitchover(sl *ServerMonitor, forcingLog bool) bool {
-	ss, err := sl.GetSlaveStatus(sl.ReplicationSourceName)
+func (cluster *Cluster) isSubordinateElectableForSwitchover(sl *ServerMonitor, forcingLog bool) bool {
+	ss, err := sl.GetSubordinateStatus(sl.ReplicationSourceName)
 	if err != nil {
-		cluster.LogPrintf(LvlDbg, "Error in getting slave status in testing slave electable for switchover %s: %s  ", sl.URL, err)
+		cluster.LogPrintf(LvlDbg, "Error in getting subordinate status in testing subordinate electable for switchover %s: %s  ", sl.URL, err)
 		return false
 	}
-	hasBinLogs, err := cluster.IsEqualBinlogFilters(cluster.master, sl)
+	hasBinLogs, err := cluster.IsEqualBinlogFilters(cluster.main, sl)
 	if err != nil {
 		if cluster.Conf.LogLevel > 1 || forcingLog {
 			cluster.LogPrintf(LvlWarn, "Could not check binlog filters")
@@ -79,38 +79,38 @@ func (cluster *Cluster) isSlaveElectableForSwitchover(sl *ServerMonitor, forcing
 	}
 	if hasBinLogs == false && cluster.Conf.CheckBinFilter == true {
 		if cluster.Conf.LogLevel > 1 || forcingLog {
-			cluster.LogPrintf(LvlWarn, "Binlog filters differ on master and slave %s. Skipping", sl.URL)
+			cluster.LogPrintf(LvlWarn, "Binlog filters differ on main and subordinate %s. Skipping", sl.URL)
 		}
 		return false
 	}
-	if cluster.IsEqualReplicationFilters(cluster.master, sl) == false && cluster.Conf.CheckReplFilter == true {
+	if cluster.IsEqualReplicationFilters(cluster.main, sl) == false && cluster.Conf.CheckReplFilter == true {
 		if cluster.Conf.LogLevel > 1 || forcingLog {
-			cluster.LogPrintf(LvlWarn, "Replication filters differ on master and slave %s. Skipping", sl.URL)
+			cluster.LogPrintf(LvlWarn, "Replication filters differ on main and subordinate %s. Skipping", sl.URL)
 		}
 		return false
 	}
-	if cluster.Conf.SwitchGtidCheck && cluster.IsCurrentGTIDSync(sl, cluster.master) == false && cluster.Conf.RplChecks == true {
+	if cluster.Conf.SwitchGtidCheck && cluster.IsCurrentGTIDSync(sl, cluster.main) == false && cluster.Conf.RplChecks == true {
 		if cluster.Conf.LogLevel > 1 || forcingLog {
-			cluster.LogPrintf(LvlWarn, "Equal-GTID option is enabled and GTID position on slave %s differs from master. Skipping", sl.URL)
+			cluster.LogPrintf(LvlWarn, "Equal-GTID option is enabled and GTID position on subordinate %s differs from main. Skipping", sl.URL)
 		}
 		return false
 	}
-	if sl.HaveSemiSync && sl.SemiSyncSlaveStatus == false && cluster.Conf.SwitchSync && cluster.Conf.RplChecks {
+	if sl.HaveSemiSync && sl.SemiSyncSubordinateStatus == false && cluster.Conf.SwitchSync && cluster.Conf.RplChecks {
 		if cluster.Conf.LogLevel > 1 || forcingLog {
-			cluster.LogPrintf(LvlWarn, "Semi-sync slave %s is out of sync. Skipping", sl.URL)
+			cluster.LogPrintf(LvlWarn, "Semi-sync subordinate %s is out of sync. Skipping", sl.URL)
 		}
 		return false
 	}
-	if ss.SecondsBehindMaster.Valid == false && cluster.Conf.RplChecks == true {
+	if ss.SecondsBehindMain.Valid == false && cluster.Conf.RplChecks == true {
 		if cluster.Conf.LogLevel > 1 || forcingLog {
-			cluster.LogPrintf(LvlWarn, "Slave %s is stopped. Skipping", sl.URL)
+			cluster.LogPrintf(LvlWarn, "Subordinate %s is stopped. Skipping", sl.URL)
 		}
 		return false
 	}
 
 	if sl.IsMaxscale || sl.IsRelay {
 		if cluster.Conf.LogLevel > 1 || forcingLog {
-			cluster.LogPrintf(LvlWarn, "Slave %s is a relay slave. Skipping", sl.URL)
+			cluster.LogPrintf(LvlWarn, "Subordinate %s is a relay subordinate. Skipping", sl.URL)
 		}
 		return false
 	}
@@ -125,22 +125,22 @@ func (cluster *Cluster) isAutomaticFailover() bool {
 	return false
 }
 
-func (cluster *Cluster) isMasterFailed() bool {
-	if cluster.master.State == stateFailed {
+func (cluster *Cluster) isMainFailed() bool {
+	if cluster.main.State == stateFailed {
 		return true
 	}
 	return false
 }
 
-// isMaxMasterFailedCountReach test tentative to connect
-func (cluster *Cluster) isMaxMasterFailedCountReached() bool {
+// isMaxMainFailedCountReach test tentative to connect
+func (cluster *Cluster) isMaxMainFailedCountReached() bool {
 	// no illimited failed count
 
-	if cluster.master.FailCount >= cluster.Conf.MaxFail {
+	if cluster.main.FailCount >= cluster.Conf.MaxFail {
 		cluster.sme.AddState("WARN0023", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["WARN0023"]), ErrFrom: "CHECK"})
 		return true
 	} else {
-		//	cluster.sme.AddState("ERR00023", state.State{ErrType: "ERROR", ErrDesc: fmt.Sprintf("Constraint is blocking state %s, interactive:%t, maxfail reached:%d", cluster.master.State, cluster.Conf.Interactive, cluster.Conf.MaxFail), ErrFrom: "CONF"})
+		//	cluster.sme.AddState("ERR00023", state.State{ErrType: "ERROR", ErrDesc: fmt.Sprintf("Constraint is blocking state %s, interactive:%t, maxfail reached:%d", cluster.main.State, cluster.Conf.Interactive, cluster.Conf.MaxFail), ErrFrom: "CONF"})
 	}
 	return false
 }
@@ -172,25 +172,25 @@ func (cluster *Cluster) isBetweenFailoverTimeValid() bool {
 	return true
 }
 
-func (cluster *Cluster) isOneSlaveHeartbeatIncreasing() bool {
+func (cluster *Cluster) isOneSubordinateHeartbeatIncreasing() bool {
 	if cluster.Conf.CheckFalsePositiveHeartbeat == false {
 		return false
 	}
-	//cluster.LogPrintf("CHECK: Failover Slaves heartbeats")
+	//cluster.LogPrintf("CHECK: Failover Subordinates heartbeats")
 
-	for _, s := range cluster.slaves {
-		relaycheck, _ := cluster.GetMasterFromReplication(s)
+	for _, s := range cluster.subordinates {
+		relaycheck, _ := cluster.GetMainFromReplication(s)
 		if relaycheck != nil {
 			if relaycheck.IsRelay == false {
 				status, logs, err := dbhelper.GetStatusAsInt(s.Conn, s.DBVersion)
-				cluster.LogSQL(logs, err, s.URL, "isOneSlaveHeartbeatIncreasing", LvlDbg, "GetStatusAsInt")
+				cluster.LogSQL(logs, err, s.URL, "isOneSubordinateHeartbeatIncreasing", LvlDbg, "GetStatusAsInt")
 				saveheartbeats := status["SLAVE_RECEIVED_HEARTBEATS"]
 				if cluster.Conf.LogLevel > 1 {
 					cluster.LogPrintf(LvlDbg, "SLAVE_RECEIVED_HEARTBEATS %d", saveheartbeats)
 				}
 				time.Sleep(time.Duration(cluster.Conf.CheckFalsePositiveHeartbeatTimeout) * time.Second)
 				status2, logs, err := dbhelper.GetStatusAsInt(s.Conn, s.DBVersion)
-				cluster.LogSQL(logs, err, s.URL, "isOneSlaveHeartbeatIncreasing", LvlDbg, "GetStatusAsInt")
+				cluster.LogSQL(logs, err, s.URL, "isOneSubordinateHeartbeatIncreasing", LvlDbg, "GetStatusAsInt")
 				if cluster.Conf.LogLevel > 1 {
 					cluster.LogPrintf(LvlDbg, "SLAVE_RECEIVED_HEARTBEATS %d", status2["SLAVE_RECEIVED_HEARTBEATS"])
 				}
@@ -211,7 +211,7 @@ func (cluster *Cluster) isMaxscaleSupectRunning() bool {
 	if cluster.Conf.CheckFalsePositiveMaxscale == false {
 		return false
 	}
-	//cluster.LogPrintf("CHECK: Failover Maxscale Master Satus")
+	//cluster.LogPrintf("CHECK: Failover Maxscale Main Satus")
 	m := maxscale.MaxScale{Host: cluster.Conf.MxsHost, Port: cluster.Conf.MxsPort, User: cluster.Conf.MxsUser, Pass: cluster.Conf.MxsPass}
 	err := m.Connect()
 	if err != nil {
@@ -219,7 +219,7 @@ func (cluster *Cluster) isMaxscaleSupectRunning() bool {
 		return false
 	}
 	defer m.Close()
-	if cluster.master.MxsServerName == "" {
+	if cluster.main.MxsServerName == "" {
 		cluster.LogPrintf(LvlInfo, "MaxScale server name undiscovered")
 		return false
 	}
@@ -254,16 +254,16 @@ func (cluster *Cluster) isMaxscaleSupectRunning() bool {
 	}
 
 	time.Sleep(time.Duration(cluster.Conf.CheckFalsePositiveMaxscaleTimeout) * time.Second)
-	if strings.Contains(cluster.master.MxsServerStatus, "Running") {
-		cluster.sme.AddState("ERR00030", state.State{ErrType: LvlErr, ErrDesc: fmt.Sprintf(clusterError["ERR00030"], cluster.master.MxsServerStatus), ErrFrom: "CHECK"})
+	if strings.Contains(cluster.main.MxsServerStatus, "Running") {
+		cluster.sme.AddState("ERR00030", state.State{ErrType: LvlErr, ErrDesc: fmt.Sprintf(clusterError["ERR00030"], cluster.main.MxsServerStatus), ErrFrom: "CHECK"})
 		return true
 	}
 	return false
 }
 
-func (cluster *Cluster) isFoundCandidateMaster() bool {
+func (cluster *Cluster) isFoundCandidateMain() bool {
 
-	key := cluster.electFailoverCandidate(cluster.slaves, false)
+	key := cluster.electFailoverCandidate(cluster.subordinates, false)
 	if key == -1 {
 		cluster.sme.AddState("ERR00032", state.State{ErrType: LvlErr, ErrDesc: fmt.Sprintf(clusterError["ERR00032"]), ErrFrom: "CHECK"})
 		return false
@@ -280,10 +280,10 @@ func (cluster *Cluster) isActiveArbitration() bool {
 
 	url := "http://" + cluster.Conf.ArbitrationSasHosts + "/arbitrator"
 	var mst string
-	if cluster.master != nil {
-		mst = cluster.master.URL
+	if cluster.main != nil {
+		mst = cluster.main.URL
 	}
-	var jsonStr = []byte(`{"uuid":"` + cluster.runUUID + `","secret":"` + cluster.Conf.ArbitrationSasSecret + `","cluster":"` + cluster.Name + `","master":"` + mst + `","id":` + strconv.Itoa(cluster.Conf.ArbitrationSasUniqueId) + `}`)
+	var jsonStr = []byte(`{"uuid":"` + cluster.runUUID + `","secret":"` + cluster.Conf.ArbitrationSasSecret + `","cluster":"` + cluster.Name + `","main":"` + mst + `","id":` + strconv.Itoa(cluster.Conf.ArbitrationSasUniqueId) + `}`)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonStr))
 	req.Header.Set("X-Custom-Header", "myvalue")
 	req.Header.Set("Content-Type", "application/json")
@@ -322,10 +322,10 @@ func (cluster *Cluster) isExternalOk() bool {
 		return false
 	}
 	//cluster.LogPrintf("CHECK: Failover External Request")
-	if cluster.master == nil {
+	if cluster.main == nil {
 		return false
 	}
-	url := "http://" + cluster.master.Host + ":" + strconv.Itoa(cluster.Conf.CheckFalsePositiveExternalPort)
+	url := "http://" + cluster.main.Host + ":" + strconv.Itoa(cluster.Conf.CheckFalsePositiveExternalPort)
 	req, err := http.Get(url)
 	if err != nil {
 		return false
@@ -337,15 +337,15 @@ func (cluster *Cluster) isExternalOk() bool {
 	return false
 }
 
-func (cluster *Cluster) isNotFirstSlave() bool {
-	// let the failover doable if interactive or failover on first slave
+func (cluster *Cluster) isNotFirstSubordinate() bool {
+	// let the failover doable if interactive or failover on first subordinate
 	if cluster.Conf.Interactive == true || cluster.Conf.FailRestartUnsafe == true {
 		return true
 	}
-	// do not failover if master info is unknowned:
+	// do not failover if main info is unknowned:
 	// - first replication-manager start on no topology
 	// - all cluster down
-	if cluster.master == nil {
+	if cluster.main == nil {
 		cluster.sme.AddState("ERR00026", state.State{ErrType: LvlErr, ErrDesc: fmt.Sprintf(clusterError["ERR00026"]), ErrFrom: "CHECK"})
 		return false
 	}
@@ -368,7 +368,7 @@ func (cluster *Cluster) isValidConfig() error {
 		}
 	}
 
-	// if slaves option has been supplied, split into a slice.
+	// if subordinates option has been supplied, split into a slice.
 	if cluster.Conf.Hosts == "" {
 		cluster.LogPrintf(LvlErr, "No hosts list specified")
 		return errors.New("No hosts list specified")
@@ -376,8 +376,8 @@ func (cluster *Cluster) isValidConfig() error {
 
 	// validate users
 	if cluster.Conf.User == "" {
-		cluster.LogPrintf(LvlErr, "No master user/pair specified")
-		return errors.New("No master user/pair specified")
+		cluster.LogPrintf(LvlErr, "No main user/pair specified")
+		return errors.New("No main user/pair specified")
 	}
 
 	if cluster.Conf.RplUser == "" {
@@ -395,8 +395,8 @@ func (cluster *Cluster) isValidConfig() error {
 		}
 	}
 
-	// Check if preferred master is included in Host List
-	pfa := strings.Split(cluster.Conf.PrefMaster, ",")
+	// Check if preferred main is included in Host List
+	pfa := strings.Split(cluster.Conf.PrefMain, ",")
 
 	for _, host := range pfa {
 		if !strings.Contains(cluster.Conf.Hosts, host) {
@@ -409,7 +409,7 @@ func (cluster *Cluster) isValidConfig() error {
 
 func (cluster *Cluster) IsEqualBinlogFilters(m *ServerMonitor, s *ServerMonitor) (bool, error) {
 
-	if m.MasterStatus.Binlog_Do_DB == s.MasterStatus.Binlog_Do_DB && m.MasterStatus.Binlog_Ignore_DB == s.MasterStatus.Binlog_Ignore_DB {
+	if m.MainStatus.Binlog_Do_DB == s.MainStatus.Binlog_Do_DB && m.MainStatus.Binlog_Ignore_DB == s.MainStatus.Binlog_Ignore_DB {
 		return true, nil
 	}
 	return false, nil
@@ -450,32 +450,32 @@ func (cluster *Cluster) CheckCapture(state state.State) {
 }
 
 func (cluster *Cluster) CheckAllTableChecksum() {
-	for _, t := range cluster.master.Tables {
+	for _, t := range cluster.main.Tables {
 		cluster.CheckTableChecksum(t.Table_schema, t.Table_name)
 	}
 }
 
 func (cluster *Cluster) CheckTableChecksum(schema string, table string) {
 
-	cluster.LogPrintf(LvlInfo, "Checksum master table %s.%s %s", schema, table, cluster.master.URL)
+	cluster.LogPrintf(LvlInfo, "Checksum main table %s.%s %s", schema, table, cluster.main.URL)
 
-	Conn, err := cluster.master.GetNewDBConn()
+	Conn, err := cluster.main.GetNewDBConn()
 	if err != nil {
-		cluster.master.ClusterGroup.LogPrintf(LvlErr, "Error connection in exec query no log %s", err)
+		cluster.main.ClusterGroup.LogPrintf(LvlErr, "Error connection in exec query no log %s", err)
 		return
 	}
 	defer Conn.Close()
 	Conn.SetConnMaxLifetime(3595 * time.Second)
-	pk, _ := cluster.master.GetTablePK(schema, table)
+	pk, _ := cluster.main.GetTablePK(schema, table)
 	if pk == "" {
-		cluster.master.ClusterGroup.LogPrintf(LvlErr, "Checksum, no primary key for table %s.%s", schema, table)
-		t := cluster.master.DictTables[schema+"."+table]
+		cluster.main.ClusterGroup.LogPrintf(LvlErr, "Checksum, no primary key for table %s.%s", schema, table)
+		t := cluster.main.DictTables[schema+"."+table]
 		t.Table_sync = "NA"
-		cluster.master.DictTables[schema+"."+table] = t
+		cluster.main.DictTables[schema+"."+table] = t
 		return
 	}
 	if strings.Contains(pk, ",") {
-		cluster.master.ClusterGroup.LogPrintf(LvlInfo, "Checksum, composit primary key for table %s.%s", schema, table)
+		cluster.main.ClusterGroup.LogPrintf(LvlInfo, "Checksum, composit primary key for table %s.%s", schema, table)
 	}
 	Conn.Exec("CREATE DATABASE IF NOT EXISTS replication_manager_schema")
 	Conn.Exec("USE replication_manager_schema")
@@ -537,23 +537,23 @@ func (cluster *Cluster) CheckTableChecksum(schema string, table string) {
 			cluster.LogPrintf(LvlInfo, "Finished checksum table %s.%s", schema, table)
 			break
 		}
-		/*	slave := cluster.GetFirstWorkingSlave()
-			if slave != nil {
-				if slave.GetReplicationDelay() > 5 {
-					time.Sleep(time.Duration(slave.GetReplicationDelay()) * time.Second)
+		/*	subordinate := cluster.GetFirstWorkingSubordinate()
+			if subordinate != nil {
+				if subordinate.GetReplicationDelay() > 5 {
+					time.Sleep(time.Duration(subordinate.GetReplicationDelay()) * time.Second)
 				}
 			}*/
 	}
-	cluster.master.Refresh()
-	masterSeq := cluster.master.CurrentGtid.GetSeqServerIdNos(uint64(cluster.master.ServerID))
-	cluster.LogPrintf(LvlInfo, "Wait sync: Master sequence %d", masterSeq)
+	cluster.main.Refresh()
+	mainSeq := cluster.main.CurrentGtid.GetSeqServerIdNos(uint64(cluster.main.ServerID))
+	cluster.LogPrintf(LvlInfo, "Wait sync: Main sequence %d", mainSeq)
 
-	for _, s := range cluster.slaves {
+	for _, s := range cluster.subordinates {
 		if !s.IsFailed() && !s.IsReplicationBroken() {
 			for true {
-				slaveSeq := s.SlaveGtid.GetSeqServerIdNos(uint64(cluster.master.ServerID))
-				cluster.LogPrintf(LvlInfo, "Wait sync on slave %s sequence %d", s.URL, slaveSeq)
-				if slaveSeq >= masterSeq {
+				subordinateSeq := s.SubordinateGtid.GetSeqServerIdNos(uint64(cluster.main.ServerID))
+				cluster.LogPrintf(LvlInfo, "Wait sync on subordinate %s sequence %d", s.URL, subordinateSeq)
+				if subordinateSeq >= mainSeq {
 					break
 				} else {
 					cluster.SetState("WARN0086", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["WARN0086"], s.URL), ErrFrom: "MON", ServerUrl: s.URL})
@@ -563,28 +563,28 @@ func (cluster *Cluster) CheckTableChecksum(schema string, table string) {
 
 		}
 	}
-	// check slave result
-	masterChecksums, logs, err := dbhelper.GetTableChecksumResult(cluster.master.Conn)
-	cluster.LogSQL(logs, err, cluster.master.URL, "CheckTableChecksum", LvlDbg, "GetTableChecksumResult")
-	for _, s := range cluster.slaves {
-		slaveChecksums, logs, err := dbhelper.GetTableChecksumResult(s.Conn)
+	// check subordinate result
+	mainChecksums, logs, err := dbhelper.GetTableChecksumResult(cluster.main.Conn)
+	cluster.LogSQL(logs, err, cluster.main.URL, "CheckTableChecksum", LvlDbg, "GetTableChecksumResult")
+	for _, s := range cluster.subordinates {
+		subordinateChecksums, logs, err := dbhelper.GetTableChecksumResult(s.Conn)
 		cluster.LogSQL(logs, err, s.URL, "CheckTableChecksum", LvlDbg, "GetTableChecksumResult")
 		checkok := true
-		for _, chunk := range masterChecksums {
-			if chunk.ChunkCheckSum != slaveChecksums[chunk.ChunkId].ChunkCheckSum {
+		for _, chunk := range mainChecksums {
+			if chunk.ChunkCheckSum != subordinateChecksums[chunk.ChunkId].ChunkCheckSum {
 				checkok = false
 				cluster.LogPrintf(LvlInfo, "Checksum table failed chunk(%s,%s) %s.%s %s", chunk.ChunkMinKey, chunk.ChunkMaxKey, schema, table, s.URL)
-				t := cluster.master.DictTables[schema+"."+table]
+				t := cluster.main.DictTables[schema+"."+table]
 				t.Table_sync = "ER"
-				cluster.master.DictTables[schema+"."+table] = t
+				cluster.main.DictTables[schema+"."+table] = t
 			}
 
 		}
 		if checkok {
 			cluster.LogPrintf(LvlInfo, "Checksum table succeed %s.%s %s", schema, table, s.URL)
-			t := cluster.master.DictTables[schema+"."+table]
+			t := cluster.main.DictTables[schema+"."+table]
 			t.Table_sync = "OK"
-			cluster.master.DictTables[schema+"."+table] = t
+			cluster.main.DictTables[schema+"."+table] = t
 		}
 	}
 }
@@ -608,7 +608,7 @@ func (cluster *Cluster) CheckSameServerID() {
 }
 
 func (cluster *Cluster) IsSameWsrepUUID() bool {
-	if cluster.GetTopology() != topoMultiMasterWsrep {
+	if cluster.GetTopology() != topoMultiMainWsrep {
 		return true
 	}
 	for _, s := range cluster.Servers {
@@ -629,14 +629,14 @@ func (cluster *Cluster) IsSameWsrepUUID() bool {
 }
 
 func (cluster *Cluster) IsNotHavingMySQLErrantTransaction() bool {
-	if !(cluster.master.HasMySQLGTID()) {
+	if !(cluster.main.HasMySQLGTID()) {
 		return true
 	}
-	for _, s := range cluster.slaves {
+	for _, s := range cluster.subordinates {
 		if s.IsFailed() || s.IsIgnored() {
 			continue
 		}
-		hasErrantTrx, _, _ := dbhelper.HaveErrantTransactions(s.Conn, cluster.master.Variables["GTID_EXECUTED"], s.Variables["GTID_EXECUTED"])
+		hasErrantTrx, _, _ := dbhelper.HaveErrantTransactions(s.Conn, cluster.main.Variables["GTID_EXECUTED"], s.Variables["GTID_EXECUTED"])
 		if hasErrantTrx {
 			cluster.SetState("WARN0091", state.State{ErrType: LvlWarn, ErrDesc: fmt.Sprintf(clusterError["WARN0091"], s.URL), ErrFrom: "MON", ServerUrl: s.URL})
 			return false

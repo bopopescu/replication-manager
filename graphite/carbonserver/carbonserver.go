@@ -371,7 +371,7 @@ func (listener *CarbonserverListener) findHandler(wr http.ResponseWriter, req *h
 			m["metric_path"] = p
 			m["isLeaf"] = leafs[i]
 
-			// graphite master
+			// graphite main
 			m["path"] = p
 			m["is_leaf"] = leafs[i]
 			m["intervals"] = intervals

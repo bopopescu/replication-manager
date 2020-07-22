@@ -22,9 +22,9 @@ func testFailoverSemisyncAutoRejoinFlashback(cluster *cluster.Cluster, conf stri
 	cluster.SetRejoinFlashback(true)
 	cluster.SetRejoinDump(false)
 
-	SaveMasterURL := cluster.GetMaster().URL
-	SaveMaster := cluster.GetMaster()
-	//clusteruster.DelayAllSlaves()
+	SaveMainURL := cluster.GetMain().URL
+	SaveMain := cluster.GetMain()
+	//clusteruster.DelayAllSubordinates()
 	cluster.PrepareBench()
 	//go clusteruster.RunBench()
 	go cluster.RunSysbench()
@@ -32,8 +32,8 @@ func testFailoverSemisyncAutoRejoinFlashback(cluster *cluster.Cluster, conf stri
 	cluster.FailoverAndWait()
 	/// give time to start the failover
 
-	if cluster.GetMaster().URL == SaveMasterURL {
-		cluster.LogPrintf("TEST", "Old master %s ==  Next master %s  ", SaveMasterURL, cluster.GetMaster().URL)
+	if cluster.GetMain().URL == SaveMainURL {
+		cluster.LogPrintf("TEST", "Old main %s ==  Next main %s  ", SaveMainURL, cluster.GetMain().URL)
 
 		return false
 	}
@@ -41,11 +41,11 @@ func testFailoverSemisyncAutoRejoinFlashback(cluster *cluster.Cluster, conf stri
 	wg2 := new(sync.WaitGroup)
 	wg2.Add(1)
 	go cluster.WaitRejoin(wg2)
-	cluster.StartDatabaseService(SaveMaster)
+	cluster.StartDatabaseService(SaveMain)
 	wg2.Wait()
-	SaveMaster.ReadAllRelayLogs()
+	SaveMain.ReadAllRelayLogs()
 	if cluster.CheckTableConsistency("test.sbtest") != true {
-		cluster.LogPrintf(LvlErr, "Inconsitant slave")
+		cluster.LogPrintf(LvlErr, "Inconsitant subordinate")
 
 		return false
 	}

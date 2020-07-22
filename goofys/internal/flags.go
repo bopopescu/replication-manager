@@ -189,7 +189,7 @@ func NewApp() (app *cli.App) {
 
 			cli.StringFlag{
 				Name:  "sse-kms",
-				Usage: "Enable KMS encryption (SSE-KMS) for all writes using this particular KMS `key-id`. Leave blank to Use the account's CMK - customer master key (default: off)",
+				Usage: "Enable KMS encryption (SSE-KMS) for all writes using this particular KMS `key-id`. Leave blank to Use the account's CMK - customer main key (default: off)",
 				Value: "",
 			},
 

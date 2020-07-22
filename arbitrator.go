@@ -71,7 +71,7 @@ var rs = routes{
 
 type response struct {
 	Arbitration   string `json:"arbitration"`
-	ElectedMaster string `json:"master"`
+	ElectedMain string `json:"main"`
 }
 
 var (
@@ -167,14 +167,14 @@ func handlerArbitrator(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer db.Close()
-	res := dbhelper.RequestArbitration(db, h.UUID, h.Secret, h.Cluster, h.Master, h.UID, h.Hosts, h.Failed)
-	electedmaster := dbhelper.GetArbitrationMaster(db, h.Secret, h.Cluster)
+	res := dbhelper.RequestArbitration(db, h.UUID, h.Secret, h.Cluster, h.Main, h.UID, h.Hosts, h.Failed)
+	electedmain := dbhelper.GetArbitrationMain(db, h.Secret, h.Cluster)
 	if res {
 		send.Arbitration = "winner"
-		send.ElectedMaster = electedmaster
+		send.ElectedMain = electedmain
 	} else {
 		send.Arbitration = "looser"
-		send.ElectedMaster = electedmaster
+		send.ElectedMain = electedmain
 	}
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusCreated)
@@ -217,7 +217,7 @@ func handlerHeartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer db.Close()
-	res := dbhelper.WriteHeartbeat(db, h.UUID, h.Secret, h.Cluster, h.Master, h.UID, h.Hosts, h.Failed)
+	res := dbhelper.WriteHeartbeat(db, h.UUID, h.Secret, h.Cluster, h.Main, h.UID, h.Hosts, h.Failed)
 	if res == nil {
 		send = `{"heartbeat":"succed"}`
 	} else {

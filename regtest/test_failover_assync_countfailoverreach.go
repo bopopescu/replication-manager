@@ -17,13 +17,13 @@ func testFailoverNumberFailureLimitReach(cluster *cluster.Cluster, conf string, 
 		return false
 	}
 
-	SaveMaster := cluster.GetMaster()
-	SaveMasterURL := cluster.GetMaster().URL
+	SaveMain := cluster.GetMain()
+	SaveMainURL := cluster.GetMain().URL
 
-	cluster.LogPrintf("INFO :  Master is %s", cluster.GetMaster().URL)
-	cluster.SetMasterStateFailed()
+	cluster.LogPrintf("INFO :  Main is %s", cluster.GetMain().URL)
+	cluster.SetMainStateFailed()
 	cluster.SetInteractive(false)
-	cluster.GetMaster().FailCount = cluster.GetMaxFail()
+	cluster.GetMain().FailCount = cluster.GetMaxFail()
 	cluster.SetFailLimit(3)
 	cluster.SetFailTime(0)
 	cluster.SetFailoverCtr(3)
@@ -33,13 +33,13 @@ func testFailoverNumberFailureLimitReach(cluster *cluster.Cluster, conf string, 
 	cluster.CheckFailed()
 
 	cluster.WaitFailoverEnd()
-	cluster.LogPrintf("TEST", "New Master  %s ", cluster.GetMaster().URL)
-	if cluster.GetMaster().URL != SaveMasterURL {
-		cluster.LogPrintf(LvlErr, "Old master %s ==  Next master %s  ", SaveMasterURL, cluster.GetMaster().URL)
+	cluster.LogPrintf("TEST", "New Main  %s ", cluster.GetMain().URL)
+	if cluster.GetMain().URL != SaveMainURL {
+		cluster.LogPrintf(LvlErr, "Old main %s ==  Next main %s  ", SaveMainURL, cluster.GetMain().URL)
 
-		SaveMaster.FailCount = 0
+		SaveMain.FailCount = 0
 		return false
 	}
-	SaveMaster.FailCount = 0
+	SaveMain.FailCount = 0
 	return true
 }

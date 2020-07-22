@@ -25,22 +25,22 @@ func (server *ServerMonitor) GetDatabaseMetrics() []graphite.Metric {
 	replacer := strings.NewReplacer("`", "", "?", "", " ", "_", ".", "-", "(", "-", ")", "-", "/", "_", "<", "-", "'", "-", "\"", "-")
 	hostname := replacer.Replace(server.Variables["HOSTNAME"])
 	var metrics []graphite.Metric
-	if server.IsSlave {
-		m := graphite.NewMetric(fmt.Sprintf("mysql.%s.mysql_slave_status_seconds_behind_master", hostname), fmt.Sprintf("%d", server.SlaveStatus.SecondsBehindMaster.Int64), time.Now().Unix())
+	if server.IsSubordinate {
+		m := graphite.NewMetric(fmt.Sprintf("mysql.%s.mysql_subordinate_status_seconds_behind_main", hostname), fmt.Sprintf("%d", server.SubordinateStatus.SecondsBehindMain.Int64), time.Now().Unix())
 		metrics = append(metrics, m)
-		metrics = append(metrics, graphite.NewMetric(fmt.Sprintf("mysql.%s.mysql_slave_status_exec_master_log_pos", hostname), fmt.Sprintf("%s", server.SlaveStatus.ExecMasterLogPos.String), time.Now().Unix()))
-		metrics = append(metrics, graphite.NewMetric(fmt.Sprintf("mysql.%s.mysql_slave_status_read_master_log_pos", hostname), fmt.Sprintf("%s", server.SlaveStatus.ReadMasterLogPos.String), time.Now().Unix()))
-		if server.SlaveStatus.SlaveSQLRunning.String == "Yes" {
-			metrics = append(metrics, graphite.NewMetric(fmt.Sprintf("mysql.%s.mysql_slave_status_slave_sql_running", hostname), "1", time.Now().Unix()))
+		metrics = append(metrics, graphite.NewMetric(fmt.Sprintf("mysql.%s.mysql_subordinate_status_exec_main_log_pos", hostname), fmt.Sprintf("%s", server.SubordinateStatus.ExecMainLogPos.String), time.Now().Unix()))
+		metrics = append(metrics, graphite.NewMetric(fmt.Sprintf("mysql.%s.mysql_subordinate_status_read_main_log_pos", hostname), fmt.Sprintf("%s", server.SubordinateStatus.ReadMainLogPos.String), time.Now().Unix()))
+		if server.SubordinateStatus.SubordinateSQLRunning.String == "Yes" {
+			metrics = append(metrics, graphite.NewMetric(fmt.Sprintf("mysql.%s.mysql_subordinate_status_subordinate_sql_running", hostname), "1", time.Now().Unix()))
 		} else {
-			metrics = append(metrics, graphite.NewMetric(fmt.Sprintf("mysql.%s.mysql_slave_status_slave_sql_running", hostname), "0", time.Now().Unix()))
+			metrics = append(metrics, graphite.NewMetric(fmt.Sprintf("mysql.%s.mysql_subordinate_status_subordinate_sql_running", hostname), "0", time.Now().Unix()))
 		}
-		if server.SlaveStatus.SlaveIORunning.String == "Yes" {
-			metrics = append(metrics, graphite.NewMetric(fmt.Sprintf("mysql.%s.mysql_slave_status_slave_io_running", hostname), "1", time.Now().Unix()))
+		if server.SubordinateStatus.SubordinateIORunning.String == "Yes" {
+			metrics = append(metrics, graphite.NewMetric(fmt.Sprintf("mysql.%s.mysql_subordinate_status_subordinate_io_running", hostname), "1", time.Now().Unix()))
 		} else {
-			metrics = append(metrics, graphite.NewMetric(fmt.Sprintf("mysql.%s.mysql_slave_status_slave_io_running", hostname), "0", time.Now().Unix()))
+			metrics = append(metrics, graphite.NewMetric(fmt.Sprintf("mysql.%s.mysql_subordinate_status_subordinate_io_running", hostname), "0", time.Now().Unix()))
 		}
-		metrics = append(metrics, graphite.NewMetric(fmt.Sprintf("mysql.%s.mysql_slave_status_last_errno", hostname), fmt.Sprintf("%s", server.SlaveStatus.LastSQLErrno.String), time.Now().Unix()))
+		metrics = append(metrics, graphite.NewMetric(fmt.Sprintf("mysql.%s.mysql_subordinate_status_last_errno", hostname), fmt.Sprintf("%s", server.SubordinateStatus.LastSQLErrno.String), time.Now().Unix()))
 
 	}
 

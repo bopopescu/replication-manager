@@ -49,13 +49,13 @@ func (cluster *Cluster) DisplayHelp() {
 	cluster.LogPrint("HELP : Ctrl-D  Print debug information")
 	cluster.LogPrint("HELP : Ctrl-F  Manual Failover")
 	cluster.LogPrint("HELP : Ctrl-I  Toggle automatic/manual failover mode")
-	cluster.LogPrint("HELP : Ctrl-R  Set slaves read-only")
+	cluster.LogPrint("HELP : Ctrl-R  Set subordinates read-only")
 	cluster.LogPrint("HELP : Ctrl-S  Switchover")
 	cluster.LogPrint("HELP : Ctrl-N  Next Cluster")
 	cluster.LogPrint("HELP : Ctrl-P  Previous Cluster")
 	cluster.LogPrint("HELP : Ctrl-Q  Quit")
 	cluster.LogPrint("HELP : Ctrl-C  Quit")
-	cluster.LogPrint("HELP : Ctrl-W  Set slaves read-write")
+	cluster.LogPrint("HELP : Ctrl-W  Set subordinates read-write")
 }
 
 func (cluster *Cluster) LogSQL(logs string, err error, url string, from string, level string, format string, args ...interface{}) {

@@ -90,7 +90,7 @@ func (server *ServerMonitor) JobInsertTaks(task string, port string, repmanhost 
 }
 
 func (server *ServerMonitor) JobBackupPhysical() (int64, error) {
-	//server can be nil as no dicovered master
+	//server can be nil as no dicovered main
 	if server == nil {
 		return 0, nil
 	}
@@ -128,19 +128,19 @@ func (server *ServerMonitor) JobReseedPhysicalBackup() (int64, error) {
 		server.ClusterGroup.LogPrintf(LvlErr, "Receive reseed physical backup %s request for server: %s %s", server.ClusterGroup.Conf.BackupPhysicalType, server.URL, err)
 		return jobid, err
 	}
-	logs, err := server.StopSlave()
-	server.ClusterGroup.LogSQL(logs, err, server.URL, "Rejoin", LvlErr, "Failed stop slave on server: %s %s", server.URL, err)
-	logs, err = dbhelper.ChangeMaster(server.Conn, dbhelper.ChangeMasterOpt{
-		Host:      server.ClusterGroup.master.Host,
-		Port:      server.ClusterGroup.master.Port,
+	logs, err := server.StopSubordinate()
+	server.ClusterGroup.LogSQL(logs, err, server.URL, "Rejoin", LvlErr, "Failed stop subordinate on server: %s %s", server.URL, err)
+	logs, err = dbhelper.ChangeMain(server.Conn, dbhelper.ChangeMainOpt{
+		Host:      server.ClusterGroup.main.Host,
+		Port:      server.ClusterGroup.main.Port,
 		User:      server.ClusterGroup.rplUser,
 		Password:  server.ClusterGroup.rplPass,
-		Retry:     strconv.Itoa(server.ClusterGroup.Conf.ForceSlaveHeartbeatRetry),
-		Heartbeat: strconv.Itoa(server.ClusterGroup.Conf.ForceSlaveHeartbeatTime),
+		Retry:     strconv.Itoa(server.ClusterGroup.Conf.ForceSubordinateHeartbeatRetry),
+		Heartbeat: strconv.Itoa(server.ClusterGroup.Conf.ForceSubordinateHeartbeatTime),
 		Mode:      "SLAVE_POS",
 		SSL:       server.ClusterGroup.Conf.ReplicationSSL,
 	}, server.DBVersion)
-	server.ClusterGroup.LogSQL(logs, err, server.URL, "Rejoin", LvlErr, "Reseed can't changing master for physical backup %s request for server: %s %s", server.ClusterGroup.Conf.BackupPhysicalType, server.URL, err)
+	server.ClusterGroup.LogSQL(logs, err, server.URL, "Rejoin", LvlErr, "Reseed can't changing main for physical backup %s request for server: %s %s", server.ClusterGroup.Conf.BackupPhysicalType, server.URL, err)
 
 	if err != nil {
 		return jobid, err
@@ -161,20 +161,20 @@ func (server *ServerMonitor) JobFlashbackPhysicalBackup() (int64, error) {
 		return jobid, err
 	}
 
-	logs, err := server.StopSlave()
-	server.ClusterGroup.LogSQL(logs, err, server.URL, "Rejoin", LvlErr, "Failed stop slave on server: %s %s", server.URL, err)
+	logs, err := server.StopSubordinate()
+	server.ClusterGroup.LogSQL(logs, err, server.URL, "Rejoin", LvlErr, "Failed stop subordinate on server: %s %s", server.URL, err)
 
-	logs, err = dbhelper.ChangeMaster(server.Conn, dbhelper.ChangeMasterOpt{
-		Host:      server.ClusterGroup.master.Host,
-		Port:      server.ClusterGroup.master.Port,
+	logs, err = dbhelper.ChangeMain(server.Conn, dbhelper.ChangeMainOpt{
+		Host:      server.ClusterGroup.main.Host,
+		Port:      server.ClusterGroup.main.Port,
 		User:      server.ClusterGroup.rplUser,
 		Password:  server.ClusterGroup.rplPass,
-		Retry:     strconv.Itoa(server.ClusterGroup.Conf.ForceSlaveHeartbeatRetry),
-		Heartbeat: strconv.Itoa(server.ClusterGroup.Conf.ForceSlaveHeartbeatTime),
+		Retry:     strconv.Itoa(server.ClusterGroup.Conf.ForceSubordinateHeartbeatRetry),
+		Heartbeat: strconv.Itoa(server.ClusterGroup.Conf.ForceSubordinateHeartbeatTime),
 		Mode:      "SLAVE_POS",
 		SSL:       server.ClusterGroup.Conf.ReplicationSSL,
 	}, server.DBVersion)
-	server.ClusterGroup.LogSQL(logs, err, server.URL, "Rejoin", LvlErr, "Reseed can't changing master for physical backup %s request for server: %s %s", server.ClusterGroup.Conf.BackupPhysicalType, server.URL, err)
+	server.ClusterGroup.LogSQL(logs, err, server.URL, "Rejoin", LvlErr, "Reseed can't changing main for physical backup %s request for server: %s %s", server.ClusterGroup.Conf.BackupPhysicalType, server.URL, err)
 	if err != nil {
 		return jobid, err
 	}
@@ -192,20 +192,20 @@ func (server *ServerMonitor) JobReseedLogicalBackup() (int64, error) {
 
 		return jobid, err
 	}
-	logs, err := server.StopSlave()
-	server.ClusterGroup.LogSQL(logs, err, server.URL, "Rejoin", LvlErr, "Failed stop slave on server: %s %s", server.URL, err)
+	logs, err := server.StopSubordinate()
+	server.ClusterGroup.LogSQL(logs, err, server.URL, "Rejoin", LvlErr, "Failed stop subordinate on server: %s %s", server.URL, err)
 
-	logs, err = dbhelper.ChangeMaster(server.Conn, dbhelper.ChangeMasterOpt{
-		Host:      server.ClusterGroup.master.Host,
-		Port:      server.ClusterGroup.master.Port,
+	logs, err = dbhelper.ChangeMain(server.Conn, dbhelper.ChangeMainOpt{
+		Host:      server.ClusterGroup.main.Host,
+		Port:      server.ClusterGroup.main.Port,
 		User:      server.ClusterGroup.rplUser,
 		Password:  server.ClusterGroup.rplPass,
-		Retry:     strconv.Itoa(server.ClusterGroup.Conf.ForceSlaveHeartbeatRetry),
-		Heartbeat: strconv.Itoa(server.ClusterGroup.Conf.ForceSlaveHeartbeatTime),
+		Retry:     strconv.Itoa(server.ClusterGroup.Conf.ForceSubordinateHeartbeatRetry),
+		Heartbeat: strconv.Itoa(server.ClusterGroup.Conf.ForceSubordinateHeartbeatTime),
 		Mode:      "SLAVE_POS",
 		SSL:       server.ClusterGroup.Conf.ReplicationSSL,
 	}, server.DBVersion)
-	server.ClusterGroup.LogSQL(logs, err, server.URL, "Rejoin", LvlErr, "Reseed can't changing master for logical backup %s request for server: %s %s", server.ClusterGroup.Conf.BackupPhysicalType, server.URL, err)
+	server.ClusterGroup.LogSQL(logs, err, server.URL, "Rejoin", LvlErr, "Reseed can't changing main for logical backup %s request for server: %s %s", server.ClusterGroup.Conf.BackupPhysicalType, server.URL, err)
 	if err != nil {
 
 		return jobid, err
@@ -242,20 +242,20 @@ func (server *ServerMonitor) JobFlashbackLogicalBackup() (int64, error) {
 
 		return jobid, err
 	}
-	logs, err := server.StopSlave()
-	server.ClusterGroup.LogSQL(logs, err, server.URL, "Rejoin", LvlErr, "Failed stop slave on server: %s %s", server.URL, err)
+	logs, err := server.StopSubordinate()
+	server.ClusterGroup.LogSQL(logs, err, server.URL, "Rejoin", LvlErr, "Failed stop subordinate on server: %s %s", server.URL, err)
 
-	logs, err = dbhelper.ChangeMaster(server.Conn, dbhelper.ChangeMasterOpt{
-		Host:      server.ClusterGroup.master.Host,
-		Port:      server.ClusterGroup.master.Port,
+	logs, err = dbhelper.ChangeMain(server.Conn, dbhelper.ChangeMainOpt{
+		Host:      server.ClusterGroup.main.Host,
+		Port:      server.ClusterGroup.main.Port,
 		User:      server.ClusterGroup.rplUser,
 		Password:  server.ClusterGroup.rplPass,
-		Retry:     strconv.Itoa(server.ClusterGroup.Conf.ForceSlaveHeartbeatRetry),
-		Heartbeat: strconv.Itoa(server.ClusterGroup.Conf.ForceSlaveHeartbeatTime),
+		Retry:     strconv.Itoa(server.ClusterGroup.Conf.ForceSubordinateHeartbeatRetry),
+		Heartbeat: strconv.Itoa(server.ClusterGroup.Conf.ForceSubordinateHeartbeatTime),
 		Mode:      "SLAVE_POS",
 		SSL:       server.ClusterGroup.Conf.ReplicationSSL,
 	}, server.DBVersion)
-	server.ClusterGroup.LogSQL(logs, err, server.URL, "Rejoin", LvlErr, "Reseed can't changing master for logical backup %s request for server: %s %s", server.ClusterGroup.Conf.BackupPhysicalType, server.URL, err)
+	server.ClusterGroup.LogSQL(logs, err, server.URL, "Rejoin", LvlErr, "Reseed can't changing main for logical backup %s request for server: %s %s", server.ClusterGroup.Conf.BackupPhysicalType, server.URL, err)
 	if err != nil {
 		return jobid, err
 	}
@@ -360,7 +360,7 @@ func (server *ServerMonitor) JobZFSSnapBack() (int64, error) {
 func (server *ServerMonitor) JobReseedMyLoader() {
 
 	threads := strconv.Itoa(server.ClusterGroup.Conf.BackupLogicalLoadThreads)
-	dumpCmd := exec.Command(server.ClusterGroup.GetMyLoaderPath(), "--overwrite-tables", "--directory="+server.ClusterGroup.master.GetMasterBackupDirectory(), "--verbose=3", "--threads="+threads, "--host="+misc.Unbracket(server.Host), "--port="+server.Port, "--user="+server.ClusterGroup.dbUser, "--password="+server.ClusterGroup.dbPass)
+	dumpCmd := exec.Command(server.ClusterGroup.GetMyLoaderPath(), "--overwrite-tables", "--directory="+server.ClusterGroup.main.GetMainBackupDirectory(), "--verbose=3", "--threads="+threads, "--host="+misc.Unbracket(server.Host), "--port="+server.Port, "--user="+server.ClusterGroup.dbUser, "--password="+server.ClusterGroup.dbPass)
 	server.ClusterGroup.LogPrintf(LvlInfo, "Command: %s", strings.Replace(dumpCmd.String(), server.ClusterGroup.dbPass, "XXXX", 1))
 
 	stdoutIn, _ := dumpCmd.StdoutPipe()
@@ -383,16 +383,16 @@ func (server *ServerMonitor) JobReseedMyLoader() {
 	}
 	server.ClusterGroup.LogPrintf(LvlInfo, "Finish logical restaure %s for: %s", server.ClusterGroup.Conf.BackupLogicalType, server.URL)
 	server.Refresh()
-	if server.IsSlave {
+	if server.IsSubordinate {
 		server.ClusterGroup.LogPrintf(LvlInfo, "Parsing mydumper metadata ")
-		meta, err := server.JobMyLoaderParseMeta(server.ClusterGroup.master.GetMasterBackupDirectory())
+		meta, err := server.JobMyLoaderParseMeta(server.ClusterGroup.main.GetMainBackupDirectory())
 		if err != nil {
 			server.ClusterGroup.LogPrintf(LvlErr, "MyLoader metadata parsing: %s", err)
 		}
 		if server.IsMariaDB() && server.HaveMariaDBGTID {
-			server.ClusterGroup.LogPrintf(LvlInfo, "Starting slave with mydumper metadata")
-			server.ExecQueryNoBinLog("SET GLOBAL gtid_slave_pos='" + meta.BinLogUuid + "'")
-			server.StartSlave()
+			server.ClusterGroup.LogPrintf(LvlInfo, "Starting subordinate with mydumper metadata")
+			server.ExecQueryNoBinLog("SET GLOBAL gtid_subordinate_pos='" + meta.BinLogUuid + "'")
+			server.StartSubordinate()
 		}
 	}
 
@@ -554,9 +554,9 @@ func (server *ServerMonitor) GetMyBackupDirectory() string {
 
 }
 
-func (server *ServerMonitor) GetMasterBackupDirectory() string {
+func (server *ServerMonitor) GetMainBackupDirectory() string {
 
-	s3dir := server.ClusterGroup.Conf.WorkingDir + "/" + config.ConstStreamingSubDir + "/" + server.ClusterGroup.Name + "/" + server.ClusterGroup.master.Host + "_" + server.ClusterGroup.master.Port
+	s3dir := server.ClusterGroup.Conf.WorkingDir + "/" + config.ConstStreamingSubDir + "/" + server.ClusterGroup.Name + "/" + server.ClusterGroup.main.Host + "_" + server.ClusterGroup.main.Port
 
 	if _, err := os.Stat(s3dir); os.IsNotExist(err) {
 		err := os.MkdirAll(s3dir, os.ModePerm)
@@ -570,7 +570,7 @@ func (server *ServerMonitor) GetMasterBackupDirectory() string {
 }
 
 func (server *ServerMonitor) JobBackupLogical() error {
-	//server can be nil as no dicovered master
+	//server can be nil as no dicovered main
 	if server == nil {
 		return errors.New("No server define")
 	}
@@ -609,19 +609,19 @@ func (server *ServerMonitor) JobBackupLogical() error {
 	if server.ClusterGroup.Conf.BackupLogicalType == config.ConstBackupLogicalTypeMysqldump {
 		usegtid := "--gtid"
 		events := ""
-		dumpslave := ""
-		if server.IsMaster() {
-			dumpslave = "--master-data=1"
+		dumpsubordinate := ""
+		if server.IsMain() {
+			dumpsubordinate = "--main-data=1"
 		} else {
-			dumpslave = "--dump-slave=1"
+			dumpsubordinate = "--dump-subordinate=1"
 		}
 		if server.HasEventScheduler() {
 			events = "--events=true"
 		} else {
 			events = "--events=false"
 		}
-		//dumpCmd := exec.Command(server.ClusterGroup.GetMysqlDumpPath(), dumpslave, "--opt", "--hex-blob", events, "--disable-keys", "--apply-slave-statements", usegtid, "--single-transaction", "--host="+misc.Unbracket(server.Host), "--port="+server.Port, "--user="+server.ClusterGroup.dbUser, "--password="+server.ClusterGroup.dbPass, "--all-databases")
-		dumpCmd := exec.Command(server.ClusterGroup.GetMysqlDumpPath(), "--hex-blob", "--apply-slave-statements", "--single-transaction", "--host="+misc.Unbracket(server.Host), "--port="+server.Port, "--user="+server.ClusterGroup.dbUser, "--password="+server.ClusterGroup.dbPass, "--verbose", "--all-databases", dumpslave, usegtid, events)
+		//dumpCmd := exec.Command(server.ClusterGroup.GetMysqlDumpPath(), dumpsubordinate, "--opt", "--hex-blob", events, "--disable-keys", "--apply-subordinate-statements", usegtid, "--single-transaction", "--host="+misc.Unbracket(server.Host), "--port="+server.Port, "--user="+server.ClusterGroup.dbUser, "--password="+server.ClusterGroup.dbPass, "--all-databases")
+		dumpCmd := exec.Command(server.ClusterGroup.GetMysqlDumpPath(), "--hex-blob", "--apply-subordinate-statements", "--single-transaction", "--host="+misc.Unbracket(server.Host), "--port="+server.Port, "--user="+server.ClusterGroup.dbUser, "--password="+server.ClusterGroup.dbPass, "--verbose", "--all-databases", dumpsubordinate, usegtid, events)
 
 		server.ClusterGroup.LogPrintf(LvlInfo, "Command: %s ", strings.Replace(dumpCmd.String(), server.ClusterGroup.dbPass, "XXXX", -1))
 		f, err := os.Create(server.GetMyBackupDirectory() + "mysqldump.sql.gz")
@@ -862,8 +862,8 @@ func (server *ServerMonitor) JobRunViaSSH() error {
 }
 
 func (server *ServerMonitor) JobBackupBinlog(binlogfile string) error {
-	if !server.IsMaster() {
-		return errors.New("Copy only master binlog")
+	if !server.IsMain() {
+		return errors.New("Copy only main binlog")
 	}
 	if server.ClusterGroup.IsInFailover() {
 		return errors.New("Cancel job copy binlog during failover")
@@ -894,8 +894,8 @@ func (server *ServerMonitor) JobBackupBinlog(binlogfile string) error {
 }
 
 func (server *ServerMonitor) JobBackupBinlogPurge(binlogfile string) error {
-	if !server.IsMaster() {
-		return errors.New("Purge only master binlog")
+	if !server.IsMain() {
+		return errors.New("Purge only main binlog")
 	}
 	binlogfilestart, _ := strconv.Atoi(strings.Split(binlogfile, ".")[1])
 	prefix := strings.Split(binlogfile, ".")[0]
@@ -906,7 +906,7 @@ func (server *ServerMonitor) JobBackupBinlogPurge(binlogfile string) error {
 			filename := prefix + "." + fmt.Sprintf("%06d", binlogfilestop)
 			if _, err := os.Stat(server.GetMyBackupDirectory() + "/" + filename); os.IsNotExist(err) {
 				if _, ok := server.BinaryLogFiles[filename]; ok {
-					server.ClusterGroup.LogPrintf(LvlInfo, "Backup master missing binlog of %s,%s", server.URL, filename)
+					server.ClusterGroup.LogPrintf(LvlInfo, "Backup main missing binlog of %s,%s", server.URL, filename)
 					server.JobBackupBinlog(filename)
 				}
 			}
@@ -955,7 +955,7 @@ func (server *ServerMonitor) JobCapturePurge(path string, keep int) error {
 
 func (cluster *Cluster) JobRejoinMysqldumpFromSource(source *ServerMonitor, dest *ServerMonitor) error {
 	cluster.LogPrintf(LvlInfo, "Rejoining from direct mysqldump from %s", source.URL)
-	dest.StopSlave()
+	dest.StopSubordinate()
 	usegtid := ""
 
 	if dest.HasGTIDReplication() {
@@ -969,16 +969,16 @@ func (cluster *Cluster) JobRejoinMysqldumpFromSource(source *ServerMonitor, dest
 	} else {
 		events = "--events=false"
 	}
-	dumpslave := ""
-	if source.IsMaster() {
-		dumpslave = "--master-data=1"
+	dumpsubordinate := ""
+	if source.IsMain() {
+		dumpsubordinate = "--main-data=1"
 	} else {
-		dumpslave = "--dump-slave=1"
+		dumpsubordinate = "--dump-subordinate=1"
 	}
-	dumpCmd := exec.Command(cluster.GetMysqlDumpPath(), "--opt", "--hex-blob", events, "--disable-keys", dumpslave, "--apply-slave-statements", usegtid, "--single-transaction", "--all-databases", "--host="+misc.Unbracket(source.Host), "--port="+source.Port, "--user="+cluster.dbUser, "--password="+cluster.dbPass, "--verbose")
+	dumpCmd := exec.Command(cluster.GetMysqlDumpPath(), "--opt", "--hex-blob", events, "--disable-keys", dumpsubordinate, "--apply-subordinate-statements", usegtid, "--single-transaction", "--all-databases", "--host="+misc.Unbracket(source.Host), "--port="+source.Port, "--user="+cluster.dbUser, "--password="+cluster.dbPass, "--verbose")
 	stderrIn, _ := dumpCmd.StderrPipe()
 
-	clientCmd := exec.Command(cluster.GetMysqlclientPath(), `--host=`+misc.Unbracket(dest.Host), `--port=`+dest.Port, `--user=`+cluster.dbUser, `--password=`+cluster.dbPass, `--batch`, `--init-command=reset master;set sql_log_bin=0;`)
+	clientCmd := exec.Command(cluster.GetMysqlclientPath(), `--host=`+misc.Unbracket(dest.Host), `--port=`+dest.Port, `--user=`+cluster.dbUser, `--password=`+cluster.dbPass, `--batch`, `--init-command=reset main;set sql_log_bin=0;`)
 	stderrOut, _ := clientCmd.StderrPipe()
 
 	//disableBinlogCmd := exec.Command("echo", "\"set sql_bin_log=0;\"")
@@ -1013,7 +1013,7 @@ func (cluster *Cluster) JobRejoinMysqldumpFromSource(source *ServerMonitor, dest
 
 	dumpCmd.Wait()
 
-	cluster.LogPrintf(LvlInfo, "Start slave after dump on %s", dest.URL)
-	dest.StartSlave()
+	cluster.LogPrintf(LvlInfo, "Start subordinate after dump on %s", dest.URL)
+	dest.StartSubordinate()
 	return nil
 }

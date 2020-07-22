@@ -26,9 +26,9 @@ func (cluster *Cluster) initConsul() error {
 	//DefaultRegistry()
 	//opt := registry.DefaultRegistry
 	reg := registry.NewRegistry()
-	if cluster.GetMaster() != nil {
+	if cluster.GetMain() != nil {
 
-		port, _ := strconv.Atoi(cluster.GetMaster().Port)
+		port, _ := strconv.Atoi(cluster.GetMain().Port)
 		writesrv := map[string][]*registry.Service{
 			"write": []*registry.Service{
 				{
@@ -37,7 +37,7 @@ func (cluster *Cluster) initConsul() error {
 					Nodes: []*registry.Node{
 						{
 							Id:      "write_" + cluster.GetName(),
-							Address: cluster.GetMaster().Host,
+							Address: cluster.GetMain().Host,
 							Port:    port,
 						},
 					},
@@ -45,7 +45,7 @@ func (cluster *Cluster) initConsul() error {
 			},
 		}
 
-		cluster.LogPrintf(LvlInfo, "Register consul master ID %s with host %s", "write_"+cluster.GetName(), cluster.GetMaster().URL)
+		cluster.LogPrintf(LvlInfo, "Register consul main ID %s with host %s", "write_"+cluster.GetName(), cluster.GetMain().URL)
 		delservice, err := reg.GetService("write_" + cluster.GetName())
 		if err != nil {
 			for _, service := range delservice {
@@ -85,7 +85,7 @@ func (cluster *Cluster) initConsul() error {
 			cluster.LogPrintf(LvlErr, "Unexpected consul deregister error for server %s: %v", srv.URL, err)
 		}
 		if srv.State != stateFailed && srv.State != stateMaintenance && srv.State != stateUnconn {
-			if (srv.IsSlave && srv.HasReplicationIssue() == false) || (srv.IsMaster() && cluster.Conf.PRXServersReadOnMaster) {
+			if (srv.IsSubordinate && srv.HasReplicationIssue() == false) || (srv.IsMain() && cluster.Conf.PRXServersReadOnMain) {
 				cluster.LogPrintf(LvlInfo, "Register consul read service  %s %s", srv.Id, srv.URL)
 				if err := reg.Register(&readsrv); err != nil {
 					cluster.LogPrintf(LvlErr, "Unexpected consul register error for server %s: %v", srv.URL, err)

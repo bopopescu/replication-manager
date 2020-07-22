@@ -72,7 +72,7 @@ func (cluster *Cluster) SetSchedulerBackupLogical() {
 			if mysrv != nil {
 				mysrv.JobBackupLogical()
 			} else {
-				cluster.master.JobBackupLogical()
+				cluster.main.JobBackupLogical()
 			}
 		})
 		if err == nil {
@@ -90,7 +90,7 @@ func (cluster *Cluster) SetSchedulerBackupPhysical() {
 		var err error
 		cluster.LogPrintf(LvlInfo, "Schedule Physical backup time at: %s", cluster.Conf.BackupPhysicalCron)
 		cluster.idSchedulerPhysicalBackup, err = cluster.scheduler.AddFunc(cluster.Conf.BackupPhysicalCron, func() {
-			cluster.master.JobBackupPhysical()
+			cluster.main.JobBackupPhysical()
 		})
 		if err == nil {
 			cluster.Schedule["backupphysical"] = cluster.scheduler.Entry(cluster.idSchedulerPhysicalBackup)
@@ -278,15 +278,15 @@ func (cluster *Cluster) SetBenchMethod(m string) {
 	cluster.benchmarkType = m
 }
 
-func (cluster *Cluster) SetPrefMaster(PrefMaster string) {
+func (cluster *Cluster) SetPrefMain(PrefMain string) {
 	for _, srv := range cluster.Servers {
-		if srv.URL == PrefMaster || srv.Name == PrefMaster {
+		if srv.URL == PrefMain || srv.Name == PrefMain {
 			srv.SetPrefered(true)
 		} else {
 			srv.SetPrefered(false)
 		}
 	}
-	cluster.Conf.PrefMaster = PrefMaster
+	cluster.Conf.PrefMain = PrefMain
 }
 
 func (cluster *Cluster) SetFailoverCtr(failoverCtr int) {
@@ -304,8 +304,8 @@ func (cluster *Cluster) SetFailRestartUnsafe(check bool) {
 	cluster.Conf.FailRestartUnsafe = check
 }
 
-func (cluster *Cluster) SetSlavesReadOnly(check bool) {
-	for _, sl := range cluster.slaves {
+func (cluster *Cluster) SetSubordinatesReadOnly(check bool) {
+	for _, sl := range cluster.subordinates {
 		dbhelper.SetReadOnly(sl.Conn, check)
 	}
 }
@@ -333,8 +333,8 @@ func (cluster *Cluster) SetFailTime(time int64) {
 	cluster.Conf.FailTime = time
 }
 
-func (cluster *Cluster) SetMasterStateFailed() {
-	cluster.master.State = stateFailed
+func (cluster *Cluster) SetMainStateFailed() {
+	cluster.main.State = stateFailed
 }
 
 func (cluster *Cluster) SetFailSync(check bool) {
@@ -357,35 +357,35 @@ func (cluster *Cluster) SetRejoinFlashback(check bool) {
 	cluster.Conf.AutorejoinFlashback = check
 }
 
-func (cluster *Cluster) SetForceSlaveNoGtid(forceslavenogtid bool) {
-	cluster.Conf.ForceSlaveNoGtid = forceslavenogtid
+func (cluster *Cluster) SetForceSubordinateNoGtid(forcesubordinatenogtid bool) {
+	cluster.Conf.ForceSubordinateNoGtid = forcesubordinatenogtid
 }
 
 // topology setter
-func (cluster *Cluster) SetMultiTierSlave(multitierslave bool) {
-	cluster.Conf.MultiTierSlave = multitierslave
+func (cluster *Cluster) SetMultiTierSubordinate(multitiersubordinate bool) {
+	cluster.Conf.MultiTierSubordinate = multitiersubordinate
 }
-func (cluster *Cluster) SetMultiMasterRing(multimasterring bool) {
-	cluster.Conf.MultiMasterRing = multimasterring
+func (cluster *Cluster) SetMultiMainRing(multimainring bool) {
+	cluster.Conf.MultiMainRing = multimainring
 }
-func (cluster *Cluster) SetMultiMaster(multimaster bool) {
-	cluster.Conf.MultiMaster = multimaster
+func (cluster *Cluster) SetMultiMain(multimain bool) {
+	cluster.Conf.MultiMain = multimain
 }
 func (cluster *Cluster) SetBinlogServer(binlogserver bool) {
 	cluster.Conf.MxsBinlogOn = binlogserver
 }
-func (cluster *Cluster) SetMultiMasterWsrep(wsrep bool) {
-	cluster.Conf.MultiMasterWsrep = wsrep
+func (cluster *Cluster) SetMultiMainWsrep(wsrep bool) {
+	cluster.Conf.MultiMainWsrep = wsrep
 }
 func (cluster *Cluster) SetBackupRestic(check bool) error {
 	cluster.Conf.BackupRestic = check
 	return nil
 }
 
-func (cluster *Cluster) SetMasterReadOnly() {
-	if cluster.GetMaster() != nil {
-		logs, err := cluster.GetMaster().SetReadOnly()
-		cluster.LogSQL(logs, err, cluster.GetMaster().URL, "MasterFailover", LvlErr, "Could not set  master as read-only, %s", err)
+func (cluster *Cluster) SetMainReadOnly() {
+	if cluster.GetMain() != nil {
+		logs, err := cluster.GetMain().SetReadOnly()
+		cluster.LogSQL(logs, err, cluster.GetMain().URL, "MainFailover", LvlErr, "Could not set  main as read-only, %s", err)
 
 	}
 }
@@ -627,10 +627,10 @@ func (cl *Cluster) SetArbitratorReport() error {
 
 	url := "http://" + cl.Conf.ArbitrationSasHosts + "/heartbeat"
 	var mst string
-	if cl.GetMaster() != nil {
-		mst = cl.GetMaster().URL
+	if cl.GetMain() != nil {
+		mst = cl.GetMain().URL
 	}
-	var jsonStr = []byte(`{"uuid":"` + cl.runUUID + `","secret":"` + cl.Conf.ArbitrationSasSecret + `","cluster":"` + cl.GetName() + `","master":"` + mst + `","id":` + strconv.Itoa(cl.Conf.ArbitrationSasUniqueId) + `,"status":"` + cl.Status + `","hosts":` + strconv.Itoa(len(cl.GetServers())) + `,"failed":` + strconv.Itoa(cl.CountFailed(cl.GetServers())) + `}`)
+	var jsonStr = []byte(`{"uuid":"` + cl.runUUID + `","secret":"` + cl.Conf.ArbitrationSasSecret + `","cluster":"` + cl.GetName() + `","main":"` + mst + `","id":` + strconv.Itoa(cl.Conf.ArbitrationSasUniqueId) + `,"status":"` + cl.Status + `","hosts":` + strconv.Itoa(len(cl.GetServers())) + `,"failed":` + strconv.Itoa(cl.CountFailed(cl.GetServers())) + `}`)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonStr))
 	if err != nil {
 		if cl.Conf.LogHeartbeat {
@@ -834,7 +834,7 @@ func (cluster *Cluster) SetSwitchoverWaitRouteChange(value string) error {
 	if err != nil {
 		return err
 	}
-	cluster.Conf.SwitchSlaveWaitRouteChange = numvalue
+	cluster.Conf.SwitchSubordinateWaitRouteChange = numvalue
 	return nil
 }
 

@@ -86,8 +86,8 @@ func (cluster *Cluster) initProxysql(proxy *Proxy) {
 			if err != nil {
 				cluster.LogPrintf(LvlWarn, "ProxySQL could not add server %s (%s)", s.URL, err)
 			}
-			if s.State == stateMaster {
-				if cluster.Conf.ProxysqlMasterIsReader {
+			if s.State == stateMain {
+				if cluster.Conf.ProxysqlMainIsReader {
 					psql.AddServerAsWriter(misc.Unbracket(s.Host), s.Port)
 				} else {
 					psql.SetWriter(misc.Unbracket(s.Host), s.Port)
@@ -121,12 +121,12 @@ func (cluster *Cluster) failoverProxysql(proxy *Proxy) {
 				cluster.LogPrintf(LvlInfo, "Failover ProxySQL set server %s offline", s.URL)
 			}
 		}
-		if s.IsMaster() && !s.IsRelay {
-			err = psql.ReplaceWriter(misc.Unbracket(s.Host), s.Port, misc.Unbracket(cluster.oldMaster.Host), cluster.oldMaster.Port, cluster.Conf.ProxysqlMasterIsReader)
+		if s.IsMain() && !s.IsRelay {
+			err = psql.ReplaceWriter(misc.Unbracket(s.Host), s.Port, misc.Unbracket(cluster.oldMain.Host), cluster.oldMain.Port, cluster.Conf.ProxysqlMainIsReader)
 			if err != nil {
-				cluster.LogPrintf(LvlErr, "Failover ProxySQL could not set server %s Master (%s)", s.URL, err)
+				cluster.LogPrintf(LvlErr, "Failover ProxySQL could not set server %s Main (%s)", s.URL, err)
 			} else {
-				cluster.LogPrintf(LvlInfo, "Failover ProxySQL set server %s master", s.URL)
+				cluster.LogPrintf(LvlInfo, "Failover ProxySQL set server %s main", s.URL)
 			}
 		}
 	}
@@ -204,7 +204,7 @@ func (cluster *Cluster) refreshProxysql(proxy *Proxy) error {
 			proxy.BackendsRead = append(proxy.BackendsRead, bkeread)
 		}
 		// if ProxySQL and replication-manager states differ, resolve the conflict
-		if bke.PrxStatus == "OFFLINE_HARD" && s.State == stateSlave && !s.IsIgnored() {
+		if bke.PrxStatus == "OFFLINE_HARD" && s.State == stateSubordinate && !s.IsIgnored() {
 			cluster.LogPrintf(LvlDbg, "Monitor ProxySQL setting online rejoining server %s", s.URL)
 			err = psql.SetReader(misc.Unbracket(s.Host), s.Port)
 			if err != nil {
@@ -226,14 +226,14 @@ func (cluster *Cluster) refreshProxysql(proxy *Proxy) error {
 			// if the server comes back from a previously failed or standalone state, reintroduce it in
 			// the appropriate HostGroup
 		} else if s.PrevState == stateUnconn || s.PrevState == stateFailed {
-			if s.State == stateMaster {
+			if s.State == stateMain {
 				cluster.LogPrintf(LvlDbg, "Monitor ProxySQL setting writer standalone server %s", s.URL)
 				err = psql.SetWriter(misc.Unbracket(s.Host), s.Port)
 				if err != nil {
 					cluster.sme.AddState("ERR00071", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["ERR00070"], err, s.URL), ErrFrom: "PRX", ServerUrl: proxy.Name})
 				}
 				updated = true
-			} else if s.IsSlave && !s.IsIgnored() {
+			} else if s.IsSubordinate && !s.IsIgnored() {
 				err = psql.SetReader(misc.Unbracket(s.Host), s.Port)
 				cluster.LogPrintf(LvlDbg, "Monitor ProxySQL setting reader standalone server %s", s.URL)
 				if err != nil {
@@ -243,7 +243,7 @@ func (cluster *Cluster) refreshProxysql(proxy *Proxy) error {
 			}
 		}
 		// load the grants
-		if s.IsMaster() && cluster.Conf.ProxysqlCopyGrants {
+		if s.IsMain() && cluster.Conf.ProxysqlCopyGrants {
 			myprxusermap, _, err := dbhelper.GetProxySQLUsers(psql.Connection)
 			if err != nil {
 				cluster.sme.AddState("ERR00053", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["ERR00053"], err), ErrFrom: "MON", ServerUrl: proxy.Name})
@@ -262,7 +262,7 @@ func (cluster *Cluster) refreshProxysql(proxy *Proxy) error {
 						if u.User != cluster.dbUser {
 							uniUsers[u.User+":"+u.Password] = u
 						} else if cluster.Conf.MonitorWriteHeartbeatCredential == "" {
-							//  load the repman DB user in proxy beacause we don't have an extra user to query master
+							//  load the repman DB user in proxy beacause we don't have an extra user to query main
 							uniUsers[u.User+":"+u.Password] = u
 						}
 					}

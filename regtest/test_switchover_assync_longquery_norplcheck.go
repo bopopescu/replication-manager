@@ -24,12 +24,12 @@ func testSwitchoverLongQueryNoRplCheckNoSemiSync(cluster *cluster.Cluster, conf 
 		return false
 	}
 
-	SaveMasterURL := cluster.GetMaster().URL
-	go dbhelper.InjectLongTrx(cluster.GetMaster().Conn, 20)
+	SaveMainURL := cluster.GetMain().URL
+	go dbhelper.InjectLongTrx(cluster.GetMain().Conn, 20)
 
-	cluster.LogPrintf("TEST", "Master is %s", cluster.GetMaster().URL)
+	cluster.LogPrintf("TEST", "Main is %s", cluster.GetMain().URL)
 	cluster.SwitchoverWaitTest()
-	cluster.LogPrintf("TEST", "New Master  %s ", cluster.GetMaster().URL)
+	cluster.LogPrintf("TEST", "New Main  %s ", cluster.GetMain().URL)
 
 	time.Sleep(20 * time.Second)
 	err = cluster.EnableSemisync()
@@ -37,8 +37,8 @@ func testSwitchoverLongQueryNoRplCheckNoSemiSync(cluster *cluster.Cluster, conf 
 		cluster.LogPrintf(LvlErr, "%s", err)
 		return false
 	}
-	if cluster.GetMaster().URL != SaveMasterURL {
-		cluster.LogPrintf(LvlErr, "Saved Prefered master %s <>  from saved %s  ", SaveMasterURL, cluster.GetMaster().URL)
+	if cluster.GetMain().URL != SaveMainURL {
+		cluster.LogPrintf(LvlErr, "Saved Prefered main %s <>  from saved %s  ", SaveMainURL, cluster.GetMain().URL)
 		return false
 	}
 	return true

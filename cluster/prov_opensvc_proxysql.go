@@ -13,8 +13,8 @@ import (
 	"github.com/signal18/replication-manager/opensvc"
 )
 
-func (proxy *Proxy) ProxySQLReadOnMaster() string {
-	if proxy.IsFilterInTags("proxy.route.readonmaster") {
+func (proxy *Proxy) ProxySQLReadOnMain() string {
+	if proxy.IsFilterInTags("proxy.route.readonmain") {
 		return "1"
 	}
 	return "0"

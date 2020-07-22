@@ -296,9 +296,9 @@ func (server *ServerMonitor) OpenSVCGetDBContainerSection() map[string]string {
 			svccontainer["environment"] = `MYSQL_ROOT_PASSWORD={env.mysql_root_password} MYSQL_INITDB_SKIP_TZINFO=yes`
 		}
 		//Proceed with galera specific
-		if server.ClusterGroup.GetTopology() == topoMultiMasterWsrep && server.ClusterGroup.TopologyClusterDown() {
-			if server.ClusterGroup.GetMaster() == nil {
-				server.ClusterGroup.vmaster = server
+		if server.ClusterGroup.GetTopology() == topoMultiMainWsrep && server.ClusterGroup.TopologyClusterDown() {
+			if server.ClusterGroup.GetMain() == nil {
+				server.ClusterGroup.vmain = server
 				svccontainer["run_command"] = "mysqld --wsrep_new_cluster"
 			}
 		}
@@ -796,10 +796,10 @@ run_args = -e MYSQL_ROOT_PASSWORD={env.mysql_root_password}
  -v {env.base_dir}/pod` + pod + `/init:/docker-entrypoint-initdb.d:rw
 
 `
-		if server.ClusterGroup.GetTopology() == topoMultiMasterWsrep && server.ClusterGroup.TopologyClusterDown() {
+		if server.ClusterGroup.GetTopology() == topoMultiMainWsrep && server.ClusterGroup.TopologyClusterDown() {
 			//Proceed with galera specific
-			if server.ClusterGroup.GetMaster() == nil {
-				server.ClusterGroup.vmaster = server
+			if server.ClusterGroup.GetMain() == nil {
+				server.ClusterGroup.vmain = server
 				vm = vm + `run_command = mysqld --wsrep_new_cluster
 `
 			}
@@ -844,7 +844,7 @@ func (server *ServerMonitor) GetEnv() map[string]string {
 		"%%ENV:SVC_CONF_ENV_INNODB_LOG_BUFFER_SIZE%%":       server.ClusterGroup.GetConfigInnoDBLogFileSize(),
 		"%%ENV:SVC_NAMESPACE%%":                             server.ClusterGroup.Name,
 		"%%ENV:SVC_NAME%%":                                  server.Name,
-		"%%ENV:SVC_CONF_ENV_SST_METHOD%%":                   server.ClusterGroup.Conf.MultiMasterWsrepSSTMethod,
+		"%%ENV:SVC_CONF_ENV_SST_METHOD%%":                   server.ClusterGroup.Conf.MultiMainWsrepSSTMethod,
 		"%%ENV:SVC_CONF_ENV_DOMAIN_ID%%":                    server.ClusterGroup.Conf.ProvDomain,
 		"%%ENV:SVC_CONF_ENV_SST_RECEIVER_PORT%%":            server.SSTPort,
 		"%%ENV:SVC_CONF_ENV_REPLICATION_MANAGER_ADDR%%":     server.ClusterGroup.Conf.MonitorAddress + ":" + server.ClusterGroup.Conf.HttpPort,

@@ -17,7 +17,7 @@ func SetHeartbeatTable(db *sqlx.DB) error {
 		if err != nil {
 			return err
 		}
-		stmt = "CREATE TABLE IF NOT EXISTS replication_manager_schema.heartbeat(secret varchar(64) ,cluster varchar(128),uid int , uuid varchar(128),  master varchar(128) , date timestamp,arbitration_date timestamp, status CHAR(1) DEFAULT 'U', hosts INT DEFAULT 0, failed INT DEFAULT 0, PRIMARY KEY(secret,cluster,uid) ) engine=innodb"
+		stmt = "CREATE TABLE IF NOT EXISTS replication_manager_schema.heartbeat(secret varchar(64) ,cluster varchar(128),uid int , uuid varchar(128),  main varchar(128) , date timestamp,arbitration_date timestamp, status CHAR(1) DEFAULT 'U', hosts INT DEFAULT 0, failed INT DEFAULT 0, PRIMARY KEY(secret,cluster,uid) ) engine=innodb"
 		_, err = db.Exec(stmt)
 		if err != nil {
 			return err
@@ -30,7 +30,7 @@ func SetHeartbeatTable(db *sqlx.DB) error {
 			cluster varchar(128),
 			uid int,
 			uuid varchar(128),
-			master varchar(128),
+			main varchar(128),
 			date timestamp,
 			arbitration_date timestamp,
 			status CHAR(1) DEFAULT 'U',
@@ -46,17 +46,17 @@ func SetHeartbeatTable(db *sqlx.DB) error {
 	return nil
 }
 
-func WriteHeartbeat(db *sqlx.DB, uuid string, secret string, cluster string, master string, uid int, hosts int, failed int) error {
+func WriteHeartbeat(db *sqlx.DB, uuid string, secret string, cluster string, main string, uid int, hosts int, failed int) error {
 
-	// stmt := "INSERT INTO heartbeat(secret,uuid,uid,master,date,cluster,hosts,failed) VALUES('" + secret + "','" + uuid + "'," + uid + ",'" + master + "', DATETIME('now'),'" + cluster + "'," + hosts + "," + failed
-	stmt := "INSERT OR REPLACE INTO heartbeat (secret,uuid,uid,master,date,cluster,hosts,failed) VALUES(?,?,?,?,DATETIME('now'),?,?,?)"
-	_, err := db.Exec(stmt, secret, uuid, uid, master, cluster, hosts, failed)
+	// stmt := "INSERT INTO heartbeat(secret,uuid,uid,main,date,cluster,hosts,failed) VALUES('" + secret + "','" + uuid + "'," + uid + ",'" + main + "', DATETIME('now'),'" + cluster + "'," + hosts + "," + failed
+	stmt := "INSERT OR REPLACE INTO heartbeat (secret,uuid,uid,main,date,cluster,hosts,failed) VALUES(?,?,?,?,DATETIME('now'),?,?,?)"
+	_, err := db.Exec(stmt, secret, uuid, uid, main, cluster, hosts, failed)
 	if err != nil {
 		return err
 	}
 
 	var count int
-	stmt = "SELECT count(distinct master) FROM heartbeat WHERE cluster=? AND secret=? AND date > DATETIME('now', '-10 seconds')"
+	stmt = "SELECT count(distinct main) FROM heartbeat WHERE cluster=? AND secret=? AND date > DATETIME('now', '-10 seconds')"
 	err = db.QueryRowx(stmt, cluster, secret).Scan(&count)
 	if err == nil && count == 1 {
 		stmt = "UPDATE heartbeat set status='U' WHERE status='E' AND cluster=? AND secret=?"
@@ -82,7 +82,7 @@ func ForgetArbitration(db *sqlx.DB, secret string) error {
 	return nil
 }
 
-func RequestArbitration(db *sqlx.DB, uuid string, secret string, cluster string, master string, uid int, hosts int, failed int) bool {
+func RequestArbitration(db *sqlx.DB, uuid string, secret string, cluster string, main string, uid int, hosts int, failed int) bool {
 	log.SetLevel(log.DebugLevel)
 	var count int
 	tx, err := db.Beginx()
@@ -101,10 +101,10 @@ func RequestArbitration(db *sqlx.DB, uuid string, secret string, cluster string,
 		err = tx.QueryRowx(stmt, cluster, secret, uid, failed).Scan(&count)
 		if err == nil && count == 0 {
 			log.Info("Node won election")
-			// stmt = "INSERT INTO heartbeat(secret,uuid,uid,master,date,arbitration_date,cluster, hosts, failed ) VALUES('" + secret + "','" + uuid + "'," + uid + ",'" + master + "', DATETIME('now'), DATETIME('now'),'" + cluster + "'," + hosts + "," + failed + ") ON DUPLICATE KEY UPDATE arbitration_date=DATETIME('now'),date=DATETIME('now'),master='" + master + "',status='E', uuid='" + uuid + "',hosts=" + hosts + ",failed=" + failed
-			stmt = `INSERT OR REPLACE INTO heartbeat (secret,uuid,uid,master,date,arbitration_date,cluster,hosts,failed,status)
+			// stmt = "INSERT INTO heartbeat(secret,uuid,uid,main,date,arbitration_date,cluster, hosts, failed ) VALUES('" + secret + "','" + uuid + "'," + uid + ",'" + main + "', DATETIME('now'), DATETIME('now'),'" + cluster + "'," + hosts + "," + failed + ") ON DUPLICATE KEY UPDATE arbitration_date=DATETIME('now'),date=DATETIME('now'),main='" + main + "',status='E', uuid='" + uuid + "',hosts=" + hosts + ",failed=" + failed
+			stmt = `INSERT OR REPLACE INTO heartbeat (secret,uuid,uid,main,date,arbitration_date,cluster,hosts,failed,status)
       VALUES(?,?,?,?,DATETIME('now'),DATETIME('now'),?,?,?,'E')`
-			_, err = tx.Exec(stmt, secret, uuid, uid, master, cluster, hosts, failed, secret, cluster, uid)
+			_, err = tx.Exec(stmt, secret, uuid, uid, main, cluster, hosts, failed, secret, cluster, uid)
 			if err != nil {
 				log.Error("(dbhelper.RequestArbitration) Error executing transaction: ", err)
 				tx.Rollback()
@@ -125,24 +125,24 @@ func RequestArbitration(db *sqlx.DB, uuid string, secret string, cluster string,
 	return false
 }
 
-func GetArbitrationMaster(db *sqlx.DB, secret string, cluster string) string {
-	var master string
+func GetArbitrationMain(db *sqlx.DB, secret string, cluster string) string {
+	var main string
 	// count the number of replication manager Elected that is not me for this cluster
-	stmt := "SELECT master FROM heartbeat WHERE cluster=? AND secret=?  AND status IN ('E')"
-	err := db.QueryRowx(stmt, cluster, secret).Scan(&master)
+	stmt := "SELECT main FROM heartbeat WHERE cluster=? AND secret=?  AND status IN ('E')"
+	err := db.QueryRowx(stmt, cluster, secret).Scan(&main)
 	if err == nil {
-		return master
+		return main
 	}
 	return ""
 }
 
 // SetStatusActiveHeartbeat arbitrator can set or remove election flag "E"
-func SetStatusActiveHeartbeat(db *sqlx.DB, uuid string, status string, master string, secret string, uid int) error {
+func SetStatusActiveHeartbeat(db *sqlx.DB, uuid string, status string, main string, secret string, uid int) error {
 
-	//stmt := "INSERT INTO heartbeat(secret,uid,master,date ) VALUES('" + secret + "','" + uid + "', DATETIME('now')) ON DUPLICATE KEY UPDATE uuid='" + uuid + "', date=DATETIME('now'),master='" + master + "', status='" + status + "' "
-	stmt := `INSERT OR REPLACE INTO heartbeat (secret, uid, master, date)
+	//stmt := "INSERT INTO heartbeat(secret,uid,main,date ) VALUES('" + secret + "','" + uid + "', DATETIME('now')) ON DUPLICATE KEY UPDATE uuid='" + uuid + "', date=DATETIME('now'),main='" + main + "', status='" + status + "' "
+	stmt := `INSERT OR REPLACE INTO heartbeat (secret, uid, main, date)
   VALUES(?,?,?,DATETIME('now'))`
-	_, err := db.Exec(stmt, secret, uid, master)
+	_, err := db.Exec(stmt, secret, uid, main)
 	if err != nil {
 		return err
 	}

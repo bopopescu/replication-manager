@@ -13,7 +13,7 @@ import (
 	"github.com/signal18/replication-manager/cluster"
 )
 
-func testFailoverSemisyncSlavekilledAutoRejoin(cluster *cluster.Cluster, conf string, test *cluster.Test) bool {
+func testFailoverSemisyncSubordinatekilledAutoRejoin(cluster *cluster.Cluster, conf string, test *cluster.Test) bool {
 
 	cluster.SetFailSync(false)
 	cluster.SetInteractive(false)
@@ -22,33 +22,33 @@ func testFailoverSemisyncSlavekilledAutoRejoin(cluster *cluster.Cluster, conf st
 	cluster.SetRejoinFlashback(true)
 	cluster.SetRejoinDump(false)
 
-	SaveMaster := cluster.GetMaster()
-	SaveMasterURL := SaveMaster.URL
-	//clusteruster.DelayAllSlaves()
-	killedSlave := cluster.GetSlaves()[0]
-	cluster.StopDatabaseService(killedSlave)
+	SaveMain := cluster.GetMain()
+	SaveMainURL := SaveMain.URL
+	//clusteruster.DelayAllSubordinates()
+	killedSubordinate := cluster.GetSubordinates()[0]
+	cluster.StopDatabaseService(killedSubordinate)
 
 	time.Sleep(5 * time.Second)
 	cluster.FailoverAndWait()
 
-	if cluster.GetMaster().URL == SaveMasterURL {
-		cluster.LogPrintf("TEST", "Old master %s ==  Next master %s  ", SaveMasterURL, cluster.GetMaster().URL)
+	if cluster.GetMain().URL == SaveMainURL {
+		cluster.LogPrintf("TEST", "Old main %s ==  Next main %s  ", SaveMainURL, cluster.GetMain().URL)
 
 		return false
 	}
 	cluster.PrepareBench()
 
-	cluster.StartDatabaseService(killedSlave)
+	cluster.StartDatabaseService(killedSubordinate)
 	time.Sleep(12 * time.Second)
 	wg2 := new(sync.WaitGroup)
 	wg2.Add(1)
 	go cluster.WaitRejoin(wg2)
-	cluster.StartDatabaseService(SaveMaster)
+	cluster.StartDatabaseService(SaveMain)
 	wg2.Wait()
-	SaveMaster.ReadAllRelayLogs()
+	SaveMain.ReadAllRelayLogs()
 
-	if killedSlave.HasSiblings(cluster.GetSlaves()) == false {
-		cluster.LogPrintf(LvlErr, "Not all slaves pointing to master")
+	if killedSubordinate.HasSiblings(cluster.GetSubordinates()) == false {
+		cluster.LogPrintf(LvlErr, "Not all subordinates pointing to main")
 
 		return false
 	}

@@ -5,8 +5,8 @@ import (
 )
 
 type Rule struct {
-	MSchema string `toml:"master_schema"`
-	MTable  string `toml:"master_table"`
+	MSchema string `toml:"main_schema"`
+	MTable  string `toml:"main_table"`
 	CSchema string `toml:"cloud_schema" `
 	CTable  string `toml:"cloud_table"`
 	Parent  string `toml:"parent"`
@@ -20,13 +20,13 @@ type Rule struct {
 	TableInfo *schema.Table
 }
 
-func newDefaultRule(master_schema string, master_table string) *Rule {
+func newDefaultRule(main_schema string, main_table string) *Rule {
 	r := new(Rule)
 
-	r.MSchema = master_schema
-	r.MTable = master_table
-	r.CSchema = master_schema
-	r.CTable = master_table
+	r.MSchema = main_schema
+	r.MTable = main_table
+	r.CSchema = main_schema
+	r.CTable = main_table
 	r.FieldMapping = make(map[string]string)
 
 	return r

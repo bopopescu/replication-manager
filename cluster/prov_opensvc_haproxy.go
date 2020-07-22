@@ -22,10 +22,10 @@ func (cluster *Cluster) OpenSVCGetHaproxyContainerSection(server *Proxy) map[str
 		svccontainer["rm"] = "true"
 		svccontainer["type"] = server.ClusterGroup.Conf.ProvType
 		if server.ClusterGroup.Conf.ProvProxDiskType != "volume" {
-			svccontainer["run_args"] = `--ulimit nofile=262144:262144 -v {env.base_dir}/pod01/init/checkslave:/usr/bin/checkslave:rw -v {env.base_dir}/pod01/init/checkmaster:/usr/bin/checkmaster:rw -v /etc/localtime:/etc/localtime:ro -v {env.base_dir}/pod01/conf:/usr/local/etc/haproxy:rw`
+			svccontainer["run_args"] = `--ulimit nofile=262144:262144 -v {env.base_dir}/pod01/init/checksubordinate:/usr/bin/checksubordinate:rw -v {env.base_dir}/pod01/init/checkmain:/usr/bin/checkmain:rw -v /etc/localtime:/etc/localtime:ro -v {env.base_dir}/pod01/conf:/usr/local/etc/haproxy:rw`
 		} else {
 			svccontainer["run_args"] = "--ulimit nofile=262144:262144"
-			svccontainer["volume_mounts"] = `{env.base_dir}/pod01/init/checkslave:/usr/bin/checkslave:rw {env.base_dir}/pod01/init/checkmaster:/usr/bin/checkmaster:rw /etc/localtime:/etc/localtime:ro {env.base_dir}/pod01/conf:/usr/local/etc/haproxy:rw`
+			svccontainer["volume_mounts"] = `{env.base_dir}/pod01/init/checksubordinate:/usr/bin/checksubordinate:rw {env.base_dir}/pod01/init/checkmain:/usr/bin/checkmain:rw /etc/localtime:/etc/localtime:ro {env.base_dir}/pod01/conf:/usr/local/etc/haproxy:rw`
 		}
 	}
 
@@ -75,8 +75,8 @@ type = docker
 run_image = {env.haproxy_img}
 netns = container#00` + pod + `
 rm = true
-run_args = -v {env.base_dir}/pod` + pod + `/init/checkslave:/usr/bin/checkslave:rw
-		-v {env.base_dir}/pod` + pod + `/init/checkmaster:/usr/bin/checkmaster:rw
+run_args = -v {env.base_dir}/pod` + pod + `/init/checksubordinate:/usr/bin/checksubordinate:rw
+		-v {env.base_dir}/pod` + pod + `/init/checkmain:/usr/bin/checkmain:rw
     -v /etc/localtime:/etc/localtime:ro
     -v {env.base_dir}/pod` + pod + `/conf:/usr/local/etc/haproxy:rw
 `

@@ -24,15 +24,15 @@ type topologyError struct {
 }
 
 const (
-	topoMasterSlave         string = "master-slave"
+	topoMainSubordinate         string = "main-subordinate"
 	topoUnknown             string = "unknown"
 	topoBinlogServer        string = "binlog-server"
-	topoMultiTierSlave      string = "multi-tier-slave"
-	topoMultiMaster         string = "multi-master"
-	topoMultiMasterRing     string = "multi-master-ring"
-	topoMultiMasterWsrep    string = "multi-master-wsrep"
-	topoMasterSlavePgLog    string = "master-slave-pg-logical"
-	topoMasterSlavePgStream string = "master-slave-pg-stream"
+	topoMultiTierSubordinate      string = "multi-tier-subordinate"
+	topoMultiMain         string = "multi-main"
+	topoMultiMainRing     string = "multi-main-ring"
+	topoMultiMainWsrep    string = "multi-main-wsrep"
+	topoMainSubordinatePgLog    string = "main-subordinate-pg-logical"
+	topoMainSubordinatePgStream string = "main-subordinate-pg-stream"
 )
 
 func (cluster *Cluster) newServerList() error {
@@ -78,10 +78,10 @@ func (cluster *Cluster) AddChildServers() error {
 	for _, c := range mychilds {
 		for _, sv := range c.Servers {
 
-			if sv.IsSlaveOfReplicationSource(cluster.Conf.MasterConn) {
-				mymaster, _ := cluster.GetMasterFromReplication(sv)
-				if mymaster != nil {
-					//	cluster.slaves = append(cluster.slaves, sv)
+			if sv.IsSubordinateOfReplicationSource(cluster.Conf.MainConn) {
+				mymain, _ := cluster.GetMainFromReplication(sv)
+				if mymain != nil {
+					//	cluster.subordinates = append(cluster.subordinates, sv)
 					if !cluster.HasServer(sv) {
 						srv, err := cluster.newServerMonitor(sv.Name+":"+sv.Port, sv.ClusterGroup.dbUser, sv.ClusterGroup.dbPass, false, c.GetDomain())
 						if err != nil {
@@ -99,7 +99,7 @@ func (cluster *Cluster) AddChildServers() error {
 }
 
 // Start of topology detection
-// Create a connection to each host and build list of slaves.
+// Create a connection to each host and build list of subordinates.
 func (cluster *Cluster) TopologyDiscover(wcg *sync.WaitGroup) error {
 	defer wcg.Done()
 	cluster.AddChildServers()
@@ -139,83 +139,83 @@ func (cluster *Cluster) TopologyDiscover(wcg *sync.WaitGroup) error {
 	if cluster.Conf.Spider == true {
 		cluster.SpiderShardsDiscovery()
 	}
-	cluster.slaves = nil
+	cluster.subordinates = nil
 	for k, sv := range cluster.Servers {
 		// Failed Do not ignore suspect or topology will change to fast
 		if sv.IsFailed() {
 			continue
 		}
-		// count wsrep node as  slaves
-		if sv.IsSlave || sv.IsWsrepPrimary {
+		// count wsrep node as  subordinates
+		if sv.IsSubordinate || sv.IsWsrepPrimary {
 			if cluster.Conf.LogLevel > 2 {
-				cluster.LogPrintf(LvlDbg, "Server %s is configured as a slave", sv.URL)
+				cluster.LogPrintf(LvlDbg, "Server %s is configured as a subordinate", sv.URL)
 			}
-			cluster.slaves = append(cluster.slaves, sv)
+			cluster.subordinates = append(cluster.subordinates, sv)
 		} else {
-			// not slave
+			// not subordinate
 
-			if sv.BinlogDumpThreads == 0 && sv.State != stateMaster {
+			if sv.BinlogDumpThreads == 0 && sv.State != stateMain {
 				//sv.State = stateUnconn
 				//transition to standalone may happen despite server have never connect successfully when default to suspect
 				if cluster.Conf.LogLevel > 2 {
-					cluster.LogPrintf(LvlDbg, "Server %s has no slaves ", sv.URL)
+					cluster.LogPrintf(LvlDbg, "Server %s has no subordinates ", sv.URL)
 				}
 			} else {
 				if cluster.Conf.LogLevel > 2 {
-					cluster.LogPrintf(LvlDbg, "Server %s was set master as last non slave", sv.URL)
+					cluster.LogPrintf(LvlDbg, "Server %s was set main as last non subordinate", sv.URL)
 				}
-				if cluster.Status == ConstMonitorActif && cluster.master != nil && cluster.GetTopology() == topoMasterSlave && cluster.Servers[k].URL != cluster.master.URL {
-					//Extra master in master slave topology rejoin it after split brain
+				if cluster.Status == ConstMonitorActif && cluster.main != nil && cluster.GetTopology() == topoMainSubordinate && cluster.Servers[k].URL != cluster.main.URL {
+					//Extra main in main subordinate topology rejoin it after split brain
 					cluster.SetState("ERR00063", state.State{ErrType: "ERROR", ErrDesc: fmt.Sprintf(clusterError["ERR00063"]), ErrFrom: "TOPO"})
-					cluster.Servers[k].RejoinMaster()
+					cluster.Servers[k].RejoinMain()
 				} else {
-					cluster.master = cluster.Servers[k]
-					cluster.master.State = stateMaster
+					cluster.main = cluster.Servers[k]
+					cluster.main.State = stateMain
 
-					if cluster.master.IsReadOnly() && !cluster.master.IsRelay {
-						cluster.master.SetReadWrite()
-						cluster.LogPrintf(LvlInfo, "Server %s disable read only as last non slave", cluster.master.URL)
+					if cluster.main.IsReadOnly() && !cluster.main.IsRelay {
+						cluster.main.SetReadWrite()
+						cluster.LogPrintf(LvlInfo, "Server %s disable read only as last non subordinate", cluster.main.URL)
 					}
 				}
 			}
 
 		}
-		// end not slave
+		// end not subordinate
 	}
 
-	// If no cluster.slaves are detected, generate an error
-	if len(cluster.slaves) == 0 && cluster.GetTopology() != topoMultiMasterWsrep {
+	// If no cluster.subordinates are detected, generate an error
+	if len(cluster.subordinates) == 0 && cluster.GetTopology() != topoMultiMainWsrep {
 		cluster.SetState("ERR00010", state.State{ErrType: "ERROR", ErrDesc: fmt.Sprintf(clusterError["ERR00010"]), ErrFrom: "TOPO"})
 	}
 
-	// Check that all slave servers have the same master and conformity.
-	if cluster.Conf.MultiMaster == false && cluster.Conf.Spider == false {
-		for _, sl := range cluster.slaves {
+	// Check that all subordinate servers have the same main and conformity.
+	if cluster.Conf.MultiMain == false && cluster.Conf.Spider == false {
+		for _, sl := range cluster.subordinates {
 			if sl.IsMaxscale == false && !sl.IsFailed() {
-				sl.CheckSlaveSettings()
-				sl.CheckSlaveSameMasterGrants()
+				sl.CheckSubordinateSettings()
+				sl.CheckSubordinateSameMainGrants()
 				if sl.HasCycling() {
-					if cluster.Conf.MultiMaster == false && len(cluster.Servers) == 2 {
+					if cluster.Conf.MultiMain == false && len(cluster.Servers) == 2 {
 						cluster.SetState("ERR00011", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["ERR00011"]), ErrFrom: "TOPO", ServerUrl: sl.URL})
-						cluster.Conf.MultiMaster = true
+						cluster.Conf.MultiMain = true
 					}
-					if cluster.Conf.MultiMasterRing == false && len(cluster.Servers) > 2 {
-						cluster.Conf.MultiMasterRing = true
+					if cluster.Conf.MultiMainRing == false && len(cluster.Servers) > 2 {
+						cluster.Conf.MultiMainRing = true
 					}
-					if cluster.Conf.MultiMasterRing == true && cluster.GetMaster() == nil {
-						cluster.vmaster = sl
+					if cluster.Conf.MultiMainRing == true && cluster.GetMain() == nil {
+						cluster.vmain = sl
 					}
 
 					//broken replication ring
-				} else if cluster.Conf.MultiMasterRing == true {
-					//setting a virtual master if none
+				} else if cluster.Conf.MultiMainRing == true {
+					//setting a virtual main if none
 					cluster.SetState("ERR00048", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["ERR00048"]), ErrFrom: "TOPO"})
-					cluster.master = cluster.GetFailedServer()
+					cluster.main = cluster.GetFailedServer()
 				}
 
 			}
-			if cluster.Conf.MultiMaster == false && sl.IsMaxscale == false {
-				if sl.IsSlave == true && sl.HasSlaves(cluster.slaves) == true {
+			if cluster.Conf.MultiMain == false && sl.IsMaxscale == false {
+				if sl.IsSubordinate == true && sl.HasSubordinates(cluster.subordinates) == true {
 					sl.IsRelay = true
 					sl.State = stateRelay
 				} else if sl.IsRelay {
@@ -224,7 +224,7 @@ func (cluster *Cluster) TopologyDiscover(wcg *sync.WaitGroup) error {
 			}
 		}
 	}
-	if cluster.Conf.MultiMaster == true || cluster.GetTopology() == topoMultiMasterWsrep {
+	if cluster.Conf.MultiMain == true || cluster.GetTopology() == topoMultiMainWsrep {
 		srw := 0
 		for _, s := range cluster.Servers {
 			if s.IsReadWrite() {
@@ -232,7 +232,7 @@ func (cluster *Cluster) TopologyDiscover(wcg *sync.WaitGroup) error {
 			}
 		}
 		if srw > 1 {
-			cluster.SetState("WARN0003", state.State{ErrType: "WARNING", ErrDesc: "RW server count > 1 in multi-master mode. set read_only=1 in cnf is a must have, choosing prefered master", ErrFrom: "TOPO"})
+			cluster.SetState("WARN0003", state.State{ErrType: "WARNING", ErrDesc: "RW server count > 1 in multi-main mode. set read_only=1 in cnf is a must have, choosing prefered main", ErrFrom: "TOPO"})
 		}
 		srw = 0
 		for _, s := range cluster.Servers {
@@ -241,84 +241,84 @@ func (cluster *Cluster) TopologyDiscover(wcg *sync.WaitGroup) error {
 			}
 		}
 		if srw > 1 {
-			cluster.SetState("WARN0004", state.State{ErrType: "WARNING", ErrDesc: "RO server count > 1 in multi-master mode.  switching to preferred master.", ErrFrom: "TOPO"})
-			server := cluster.getPreferedMaster()
+			cluster.SetState("WARN0004", state.State{ErrType: "WARNING", ErrDesc: "RO server count > 1 in multi-main mode.  switching to preferred main.", ErrFrom: "TOPO"})
+			server := cluster.getPreferedMain()
 			if server != nil {
 				server.SetReadWrite()
 			} else {
-				cluster.SetState("WARN0006", state.State{ErrType: "WARNING", ErrDesc: "Multi-master need a preferred master.", ErrFrom: "TOPO"})
+				cluster.SetState("WARN0006", state.State{ErrType: "WARNING", ErrDesc: "Multi-main need a preferred main.", ErrFrom: "TOPO"})
 			}
 		}
 	}
 
-	if cluster.slaves != nil {
-		if len(cluster.slaves) > 0 {
-			// Depending if we are doing a failover or a switchover, we will find the master in the list of
+	if cluster.subordinates != nil {
+		if len(cluster.subordinates) > 0 {
+			// Depending if we are doing a failover or a switchover, we will find the main in the list of
 			// failed hosts or unconnected hosts.
-			// First of all, get a server id from the cluster.slaves slice, they should be all the same
-			sid := cluster.slaves[0].GetReplicationServerID()
+			// First of all, get a server id from the cluster.subordinates slice, they should be all the same
+			sid := cluster.subordinates[0].GetReplicationServerID()
 
 			for k, s := range cluster.Servers {
-				if cluster.Conf.MultiMaster == false && s.State == stateUnconn {
+				if cluster.Conf.MultiMain == false && s.State == stateUnconn {
 					if s.ServerID == sid {
-						cluster.master = cluster.Servers[k]
-						cluster.master.State = stateMaster
-						cluster.master.SetReadWrite()
+						cluster.main = cluster.Servers[k]
+						cluster.main.State = stateMain
+						cluster.main.SetReadWrite()
 						if cluster.Conf.LogLevel > 2 {
-							cluster.LogPrintf(LvlDbg, "Server %s was autodetected as a master", s.URL)
+							cluster.LogPrintf(LvlDbg, "Server %s was autodetected as a main", s.URL)
 						}
 						break
 					}
 				}
-				if (cluster.Conf.MultiMaster == true || cluster.GetTopology() == topoMultiMasterWsrep) && !cluster.Servers[k].IsDown() {
+				if (cluster.Conf.MultiMain == true || cluster.GetTopology() == topoMultiMainWsrep) && !cluster.Servers[k].IsDown() {
 					if s.IsReadWrite() {
-						cluster.master = cluster.Servers[k]
-						if cluster.Conf.MultiMaster == true {
-							cluster.master.State = stateMaster
+						cluster.main = cluster.Servers[k]
+						if cluster.Conf.MultiMain == true {
+							cluster.main.State = stateMain
 						} else {
-							cluster.vmaster = cluster.Servers[k]
+							cluster.vmain = cluster.Servers[k]
 						}
 						if cluster.Conf.LogLevel > 2 {
-							cluster.LogPrintf(LvlDbg, "Server %s was autodetected as a master", s.URL)
+							cluster.LogPrintf(LvlDbg, "Server %s was autodetected as a main", s.URL)
 						}
 						break
 					}
 				}
 			}
 
-			// If master is not initialized, find it in the failed hosts list
-			if cluster.master == nil {
-				cluster.FailedMasterDiscovery()
+			// If main is not initialized, find it in the failed hosts list
+			if cluster.main == nil {
+				cluster.FailedMainDiscovery()
 			}
 		}
 	}
-	// Final check if master has been found
-	if cluster.master == nil {
-		// could not detect master
-		if cluster.GetMaster() == nil {
+	// Final check if main has been found
+	if cluster.main == nil {
+		// could not detect main
+		if cluster.GetMain() == nil {
 			cluster.SetState("ERR00012", state.State{ErrType: "ERROR", ErrDesc: fmt.Sprintf(clusterError["ERR00012"]), ErrFrom: "TOPO"})
 		}
 	} else {
-		cluster.master.RplMasterStatus = false
+		cluster.main.RplMainStatus = false
 		// End of autodetection code
-		if !cluster.master.IsDown() {
-			cluster.master.CheckMasterSettings()
+		if !cluster.main.IsDown() {
+			cluster.main.CheckMainSettings()
 		}
 		// Replication checks
-		if cluster.Conf.MultiMaster == false {
-			for _, sl := range cluster.slaves {
+		if cluster.Conf.MultiMain == false {
+			for _, sl := range cluster.subordinates {
 
 				if sl.IsRelay == false {
 					if cluster.Conf.LogLevel > 2 {
-						cluster.LogPrintf(LvlDbg, "Checking if server %s is a slave of server %s", sl.Host, cluster.master.Host)
+						cluster.LogPrintf(LvlDbg, "Checking if server %s is a subordinate of server %s", sl.Host, cluster.main.Host)
 					}
-					replMaster, _ := cluster.GetMasterFromReplication(sl)
+					replMain, _ := cluster.GetMainFromReplication(sl)
 
-					if replMaster != nil && replMaster.Id != cluster.master.Id {
-						cluster.SetState("ERR00064", state.State{ErrType: "ERROR", ErrDesc: fmt.Sprintf(clusterError["ERR00064"], sl.URL, cluster.master.URL, replMaster.URL), ErrFrom: "TOPO", ServerUrl: sl.URL})
+					if replMain != nil && replMain.Id != cluster.main.Id {
+						cluster.SetState("ERR00064", state.State{ErrType: "ERROR", ErrDesc: fmt.Sprintf(clusterError["ERR00064"], sl.URL, cluster.main.URL, replMain.URL), ErrFrom: "TOPO", ServerUrl: sl.URL})
 
 						if cluster.Conf.ReplicationNoRelay && cluster.Status == ConstMonitorActif {
-							cluster.RejoinFixRelay(sl, cluster.master)
+							cluster.RejoinFixRelay(sl, cluster.main)
 						}
 
 					}
@@ -327,22 +327,22 @@ func (cluster *Cluster) TopologyDiscover(wcg *sync.WaitGroup) error {
 					}
 				}
 				if sl.GetReplicationDelay() <= cluster.Conf.FailMaxDelay && sl.IsSQLThreadRunning() {
-					cluster.master.RplMasterStatus = true
+					cluster.main.RplMainStatus = true
 				}
 
 			}
 		}
 		// State also check in failover_check false positive
-		if cluster.master.IsFailed() && cluster.slaves.HasAllSlavesRunning() {
+		if cluster.main.IsFailed() && cluster.subordinates.HasAllSubordinatesRunning() {
 			cluster.SetState("ERR00016", state.State{
 				ErrType:   "ERROR",
 				ErrDesc:   clusterError["ERR00016"],
 				ErrFrom:   "NET",
-				ServerUrl: cluster.master.URL,
+				ServerUrl: cluster.main.URL,
 			})
 		}
 
-		cluster.sme.SetMasterUpAndSync(cluster.master.SemiSyncMasterStatus, cluster.master.RplMasterStatus)
+		cluster.sme.SetMainUpAndSync(cluster.main.SemiSyncMainStatus, cluster.main.RplMainStatus)
 	}
 
 	if cluster.HasAllDbUp() {
@@ -386,21 +386,21 @@ func (cluster *Cluster) AllServersFailed() bool {
 // TopologyClusterDown track state of unvailable cluster
 func (cluster *Cluster) TopologyClusterDown() bool {
 	// search for all cluster down
-	if cluster.GetMaster() == nil || cluster.GetMaster().State == stateFailed {
+	if cluster.GetMain() == nil || cluster.GetMain().State == stateFailed {
 
-		allslavefailed := true
-		for _, s := range cluster.slaves {
+		allsubordinatefailed := true
+		for _, s := range cluster.subordinates {
 			if s.State != stateFailed && s.State != stateErrorAuth && !s.IsIgnored() {
-				allslavefailed = false
+				allsubordinatefailed = false
 			}
 		}
-		if allslavefailed {
+		if allsubordinatefailed {
 			if cluster.IsDiscovered() {
-				if cluster.master != nil && cluster.Conf.Interactive == false && cluster.Conf.FailRestartUnsafe == false {
-					// forget the master if safe mode
-					//		cluster.LogPrintf(LvlInfo, "Backing up last seen master: %s for safe failover restart", cluster.master.URL)
-					//		cluster.lastmaster = cluster.master
-					//		cluster.master = nil
+				if cluster.main != nil && cluster.Conf.Interactive == false && cluster.Conf.FailRestartUnsafe == false {
+					// forget the main if safe mode
+					//		cluster.LogPrintf(LvlInfo, "Backing up last seen main: %s for safe failover restart", cluster.main.URL)
+					//		cluster.lastmain = cluster.main
+					//		cluster.main = nil
 
 				}
 			}
@@ -444,18 +444,18 @@ func (cluster *Cluster) LostMajority() bool {
 
 }
 
-func (cluster *Cluster) FailedMasterDiscovery() {
+func (cluster *Cluster) FailedMainDiscovery() {
 
-	// Slave master_host variable must point to failed master
+	// Subordinate main_host variable must point to failed main
 
-	smh := cluster.slaves[0].GetReplicationMasterHost()
+	smh := cluster.subordinates[0].GetReplicationMainHost()
 	for k, s := range cluster.Servers {
 		if s.State == stateFailed || s.State == stateErrorAuth {
-			if (s.Host == smh || s.IP == smh) && s.Port == cluster.slaves[0].GetReplicationMasterPort() {
-				if cluster.Conf.FailRestartUnsafe || cluster.MultipleSlavesUp(s) {
-					cluster.master = cluster.Servers[k]
-					cluster.master.PrevState = stateMaster
-					cluster.LogPrintf(LvlInfo, "Assuming failed server %s was a master", s.URL)
+			if (s.Host == smh || s.IP == smh) && s.Port == cluster.subordinates[0].GetReplicationMainPort() {
+				if cluster.Conf.FailRestartUnsafe || cluster.MultipleSubordinatesUp(s) {
+					cluster.main = cluster.Servers[k]
+					cluster.main.PrevState = stateMain
+					cluster.LogPrintf(LvlInfo, "Assuming failed server %s was a main", s.URL)
 				}
 				break
 			}
@@ -463,11 +463,11 @@ func (cluster *Cluster) FailedMasterDiscovery() {
 	}
 }
 
-func (cluster *Cluster) MultipleSlavesUp(candidate *ServerMonitor) bool {
+func (cluster *Cluster) MultipleSubordinatesUp(candidate *ServerMonitor) bool {
 	ct := 0
-	for _, s := range cluster.slaves {
+	for _, s := range cluster.subordinates {
 
-		if !s.IsDown() && (candidate.Host == s.GetReplicationMasterHost() || candidate.IP == s.GetReplicationMasterHost()) && candidate.Port == s.GetReplicationMasterPort() {
+		if !s.IsDown() && (candidate.Host == s.GetReplicationMainHost() || candidate.IP == s.GetReplicationMainHost()) && candidate.Port == s.GetReplicationMainPort() {
 			ct++
 		}
 	}

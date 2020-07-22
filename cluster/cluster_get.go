@@ -96,16 +96,16 @@ func (cluster *Cluster) GetPersitentState() error {
 	cluster.SLAHistory = clsave.SLAHistory
 	cluster.Crashes = clsave.Crashes
 	cluster.sme.SetSla(clsave.SLA)
-	cluster.sme.SetMasterUpAndSyncRestart()
+	cluster.sme.SetMainUpAndSyncRestart()
 
 	return nil
 }
 
-func (cluster *Cluster) GetMaster() *ServerMonitor {
-	if cluster.master == nil {
-		return cluster.vmaster
+func (cluster *Cluster) GetMain() *ServerMonitor {
+	if cluster.main == nil {
+		return cluster.vmain
 	} else {
-		return cluster.master
+		return cluster.main
 	}
 }
 
@@ -124,8 +124,8 @@ func (cluster *Cluster) GetServers() serverList {
 	return cluster.Servers
 }
 
-func (cluster *Cluster) GetSlaves() serverList {
-	return cluster.slaves
+func (cluster *Cluster) GetSubordinates() serverList {
+	return cluster.subordinates
 }
 
 func (cluster *Cluster) GetProxies() proxyList {
@@ -144,8 +144,8 @@ func (cluster *Cluster) GetStateMachine() *state.StateMachine {
 	return cluster.sme
 }
 
-func (cluster *Cluster) GetMasterFailCount() int {
-	return cluster.master.FailCount
+func (cluster *Cluster) GetMainFailCount() int {
+	return cluster.main.FailCount
 }
 
 func (cluster *Cluster) GetFailoverCtr() int {
@@ -245,15 +245,15 @@ func (cluster *Cluster) GetGComm() string {
 	return strings.Join(gcomms, ",")
 }
 
-func (cluster *Cluster) getPreferedMaster() *ServerMonitor {
-	if cluster.Conf.PrefMaster == "" {
+func (cluster *Cluster) getPreferedMain() *ServerMonitor {
+	if cluster.Conf.PrefMain == "" {
 		return nil
 	}
 	for _, server := range cluster.Servers {
 		if cluster.Conf.LogLevel > 2 {
-			cluster.LogPrintf(LvlDbg, "Lookup server %s if preferred master: %s", server.URL, cluster.Conf.PrefMaster)
+			cluster.LogPrintf(LvlDbg, "Lookup server %s if preferred main: %s", server.URL, cluster.Conf.PrefMain)
 		}
-		if server.URL == cluster.Conf.PrefMaster {
+		if server.URL == cluster.Conf.PrefMain {
 			return server
 		}
 	}
@@ -266,7 +266,7 @@ func (cluster *Cluster) GetRelayServer() *ServerMonitor {
 	}
 	for _, server := range cluster.Servers {
 		if cluster.Conf.LogLevel > 2 {
-			cluster.LogPrintf(LvlDbg, "Lookup server %s if maxscale binlog server: %s", server.URL, cluster.Conf.PrefMaster)
+			cluster.LogPrintf(LvlDbg, "Lookup server %s if maxscale binlog server: %s", server.URL, cluster.Conf.PrefMain)
 		}
 		if server.IsRelay {
 			return server
@@ -348,7 +348,7 @@ func (cluster *Cluster) GetProxyFromURL(url string) *Proxy {
 	return nil
 }
 
-func (cluster *Cluster) GetMasterFromReplication(s *ServerMonitor) (*ServerMonitor, error) {
+func (cluster *Cluster) GetMainFromReplication(s *ServerMonitor) (*ServerMonitor, error) {
 
 	for _, server := range cluster.Servers {
 		if server.ServerID == s.ServerID {
@@ -358,14 +358,14 @@ func (cluster *Cluster) GetMasterFromReplication(s *ServerMonitor) (*ServerMonit
 		if len(s.Replications) > 0 {
 
 			if cluster.Conf.LogLevel > 2 {
-				cluster.LogPrintf(LvlDbg, "GetMasterFromReplication server  %d  lookup if server %s is the one : %d", s.GetReplicationServerID(), server.URL, server.ServerID)
+				cluster.LogPrintf(LvlDbg, "GetMainFromReplication server  %d  lookup if server %s is the one : %d", s.GetReplicationServerID(), server.URL, server.ServerID)
 			}
 			if s.IsIOThreadRunning() && s.IsSQLThreadRunning() {
 				if s.GetReplicationServerID() == server.ServerID {
 					return server, nil
 				}
 			} else {
-				if s.GetReplicationMasterHost() == server.Host && s.GetReplicationMasterPort() == server.Port {
+				if s.GetReplicationMainHost() == server.Host && s.GetReplicationMainPort() == server.Port {
 					return server, nil
 				}
 			}
@@ -394,8 +394,8 @@ func (cluster *Cluster) GetBackupServer() *ServerMonitor {
 	return nil
 }
 
-func (cluster *Cluster) GetFirstWorkingSlave() *ServerMonitor {
-	for _, server := range cluster.slaves {
+func (cluster *Cluster) GetFirstWorkingSubordinate() *ServerMonitor {
+	for _, server := range cluster.subordinates {
 		if !server.IsDown() && !server.IsReplicationBroken() {
 			return server
 		}
@@ -427,28 +427,28 @@ func (cluster *Cluster) GetProxyServerIdList() []string {
 
 func (cluster *Cluster) GetTopology() string {
 	cluster.Conf.Topology = topoUnknown
-	if cluster.Conf.MultiMaster {
-		cluster.Conf.Topology = topoMultiMaster
-	} else if cluster.Conf.MultiMasterRing {
-		cluster.Conf.Topology = topoMultiMasterRing
-	} else if cluster.Conf.MultiMasterWsrep {
-		cluster.Conf.Topology = topoMultiMasterWsrep
+	if cluster.Conf.MultiMain {
+		cluster.Conf.Topology = topoMultiMain
+	} else if cluster.Conf.MultiMainRing {
+		cluster.Conf.Topology = topoMultiMainRing
+	} else if cluster.Conf.MultiMainWsrep {
+		cluster.Conf.Topology = topoMultiMainWsrep
 	} else if cluster.Conf.MxsBinlogOn {
 		cluster.Conf.Topology = topoBinlogServer
-	} else if cluster.Conf.MultiTierSlave {
-		cluster.Conf.Topology = topoMultiTierSlave
-	} else if cluster.Conf.MasterSlavePgStream {
-		cluster.Conf.Topology = topoMasterSlavePgStream
+	} else if cluster.Conf.MultiTierSubordinate {
+		cluster.Conf.Topology = topoMultiTierSubordinate
+	} else if cluster.Conf.MainSubordinatePgStream {
+		cluster.Conf.Topology = topoMainSubordinatePgStream
 		cluster.IsPostgres = true
-	} else if cluster.Conf.MasterSlavePgLogical {
-		cluster.Conf.Topology = topoMasterSlavePgLog
+	} else if cluster.Conf.MainSubordinatePgLogical {
+		cluster.Conf.Topology = topoMainSubordinatePgLog
 		cluster.IsPostgres = true
 	} else {
 		relay := cluster.GetRelayServer()
 		if relay != nil && cluster.Conf.ReplicationNoRelay == false {
-			cluster.Conf.Topology = topoMultiTierSlave
-		} else if cluster.master != nil {
-			cluster.Conf.Topology = topoMasterSlave
+			cluster.Conf.Topology = topoMultiTierSubordinate
+		} else if cluster.main != nil {
+			cluster.Conf.Topology = topoMainSubordinate
 		}
 	}
 	return cluster.Conf.Topology
@@ -545,7 +545,7 @@ func (cluster *Cluster) GetTableDLL(schema string, table string, srv *ServerMoni
 
 func (cluster *Cluster) GetTableDLLNoFK(schema string, table string, srv *ServerMonitor) (string, error) {
 
-	ddl, err := cluster.GetTableDLL(schema, table, cluster.master)
+	ddl, err := cluster.GetTableDLL(schema, table, cluster.main)
 	if err != nil {
 		return "", err
 	}

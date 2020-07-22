@@ -22,30 +22,30 @@ func testFailoverAssyncAutoRejoinFlashback(cluster *cluster.Cluster, conf string
 	cluster.SetRejoinFlashback(true)
 	cluster.SetRejoinDump(false)
 	cluster.DisableSemisync()
-	SaveMaster := cluster.GetMaster()
-	SaveMasterURL := SaveMaster.URL
+	SaveMain := cluster.GetMain()
+	SaveMainURL := SaveMain.URL
 	go cluster.RunSysbench()
 	time.Sleep(4 * time.Second)
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
 	go cluster.WaitFailover(wg)
-	cluster.StopDatabaseService(SaveMaster)
+	cluster.StopDatabaseService(SaveMain)
 	wg.Wait()
 	/// give time to start the failover
 
-	if cluster.GetMaster().URL == SaveMasterURL {
-		cluster.LogPrintf("TEST", " Old master %s ==  Next master %s  ", SaveMasterURL, cluster.GetMaster().URL)
+	if cluster.GetMain().URL == SaveMainURL {
+		cluster.LogPrintf("TEST", " Old main %s ==  Next main %s  ", SaveMainURL, cluster.GetMain().URL)
 		return false
 	}
 
 	wg2 := new(sync.WaitGroup)
 	wg2.Add(1)
 	go cluster.WaitRejoin(wg2)
-	cluster.StartDatabaseService(SaveMaster)
+	cluster.StartDatabaseService(SaveMain)
 	wg2.Wait()
 
 	if cluster.CheckTableConsistency("test.sbtest") != true {
-		cluster.LogPrintf(LvlErr, "Inconsitant slave")
+		cluster.LogPrintf(LvlErr, "Inconsitant subordinate")
 		return false
 	}
 

@@ -13,11 +13,11 @@ func testFailoverManual(cluster *cluster.Cluster, conf string, test *cluster.Tes
 	cluster.SetFailSync(false)
 	cluster.SetInteractive(true)
 	cluster.SetRplChecks(true)
-	SaveMaster := cluster.GetMaster()
-	SaveMasterURL := SaveMaster.URL
+	SaveMain := cluster.GetMain()
+	SaveMainURL := SaveMain.URL
 	cluster.FailoverNow()
-	if cluster.GetMaster().URL != SaveMasterURL {
-		cluster.LogPrintf("TEST", " Old master %s !=  Next master %s  ", SaveMasterURL, cluster.GetMaster().URL)
+	if cluster.GetMain().URL != SaveMainURL {
+		cluster.LogPrintf("TEST", " Old main %s !=  Next main %s  ", SaveMainURL, cluster.GetMain().URL)
 		return false
 	}
 

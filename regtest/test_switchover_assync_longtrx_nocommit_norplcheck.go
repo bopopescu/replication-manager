@@ -22,7 +22,7 @@ func testSwitchoverLongTrxWithoutCommitNoRplCheckNoSemiSync(cluster *cluster.Clu
 		cluster.LogPrintf(LvlErr, "%s", err)
 		return false
 	}
-	SaveMasterURL := cluster.GetMaster().URL
+	SaveMainURL := cluster.GetMain().URL
 	db, err := cluster.GetClusterProxyConn()
 	if err != nil {
 		cluster.LogPrintf(LvlErr, "Can't take proxy conn %s ", err)
@@ -30,9 +30,9 @@ func testSwitchoverLongTrxWithoutCommitNoRplCheckNoSemiSync(cluster *cluster.Clu
 	}
 	dbhelper.InjectTrxWithoutCommit(db)
 	time.Sleep(12 * time.Second)
-	cluster.LogPrintf("TEST", "Master is %s", cluster.GetMaster().URL)
+	cluster.LogPrintf("TEST", "Main is %s", cluster.GetMain().URL)
 	cluster.SwitchoverWaitTest()
-	cluster.LogPrintf("TEST", "New Master  %s ", cluster.GetMaster().URL)
+	cluster.LogPrintf("TEST", "New Main  %s ", cluster.GetMain().URL)
 	err = cluster.EnableSemisync()
 	if err != nil {
 		cluster.LogPrintf(LvlErr, "%s", err)
@@ -40,8 +40,8 @@ func testSwitchoverLongTrxWithoutCommitNoRplCheckNoSemiSync(cluster *cluster.Clu
 		return false
 	}
 	time.Sleep(2 * time.Second)
-	if cluster.GetMaster().URL != SaveMasterURL {
-		cluster.LogPrintf(LvlErr, "Saved Prefered master %s <>  from saved %s  ", SaveMasterURL, cluster.GetMaster().URL)
+	if cluster.GetMain().URL != SaveMainURL {
+		cluster.LogPrintf(LvlErr, "Saved Prefered main %s <>  from saved %s  ", SaveMainURL, cluster.GetMain().URL)
 		return false
 	}
 	return true

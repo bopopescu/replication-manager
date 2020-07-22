@@ -12,7 +12,7 @@ import (
 	"github.com/signal18/replication-manager/cluster"
 )
 
-func testSwitchoverAllSlavesStopNoSemiSyncNoRplCheck(cluster *cluster.Cluster, conf string, test *cluster.Test) bool {
+func testSwitchoverAllSubordinatesStopNoSemiSyncNoRplCheck(cluster *cluster.Cluster, conf string, test *cluster.Test) bool {
 
 	cluster.SetRplMaxDelay(0)
 	cluster.SetRplChecks(false)
@@ -21,20 +21,20 @@ func testSwitchoverAllSlavesStopNoSemiSyncNoRplCheck(cluster *cluster.Cluster, c
 		cluster.LogPrintf(LvlErr, "%s", err)
 		return false
 	}
-	err = cluster.StopSlaves()
+	err = cluster.StopSubordinates()
 	if err != nil {
 		cluster.LogPrintf(LvlErr, "%s", err)
 		return false
 	}
 	time.Sleep(4 * time.Second)
-	SaveMasterURL := cluster.GetMaster().URL
-	cluster.LogPrintf("TEST", "Master is %s", cluster.GetMaster().URL)
+	SaveMainURL := cluster.GetMain().URL
+	cluster.LogPrintf("TEST", "Main is %s", cluster.GetMain().URL)
 
 	cluster.SwitchoverWaitTest()
-	cluster.LogPrintf("TEST", "New Master  %s ", cluster.GetMaster().URL)
+	cluster.LogPrintf("TEST", "New Main  %s ", cluster.GetMain().URL)
 	time.Sleep(2 * time.Second)
-	if cluster.GetMaster().URL == SaveMasterURL {
-		cluster.LogPrintf(LvlErr, "Saved Prefered master %s <>  from saved %s  ", SaveMasterURL, cluster.GetMaster().URL)
+	if cluster.GetMain().URL == SaveMainURL {
+		cluster.LogPrintf(LvlErr, "Saved Prefered main %s <>  from saved %s  ", SaveMainURL, cluster.GetMain().URL)
 		return false
 	}
 	return true

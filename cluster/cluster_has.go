@@ -92,7 +92,7 @@ func (cluster *Cluster) IsInIgnoredReadonly(server *ServerMonitor) bool {
 }
 
 func (cluster *Cluster) IsInPreferedHosts(server *ServerMonitor) bool {
-	ihosts := strings.Split(cluster.Conf.PrefMaster, ",")
+	ihosts := strings.Split(cluster.Conf.PrefMain, ",")
 	for _, ihost := range ihosts {
 		if server.URL == ihost || server.Name == ihost {
 			return true
@@ -199,13 +199,13 @@ func (cluster *Cluster) IsInHostList(host string) bool {
 	return false
 }
 
-func (cluster *Cluster) IsMasterFailed() bool {
-	// get real master or the virtual master
-	mymaster := cluster.GetMaster()
-	if mymaster == nil {
+func (cluster *Cluster) IsMainFailed() bool {
+	// get real main or the virtual main
+	mymain := cluster.GetMain()
+	if mymain == nil {
 		return true
 	}
-	if mymaster.State == stateFailed {
+	if mymain.State == stateFailed {
 		return true
 	} else {
 		return false

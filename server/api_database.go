@@ -18,14 +18,14 @@ import (
 
 func (repman *ReplicationManager) apiDatabaseUnprotectedHandler(router *mux.Router) {
 
-	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/is-master", negroni.New(
-		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServersIsMasterStatus)),
+	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/is-main", negroni.New(
+		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServersIsMainStatus)),
 	))
-	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/is-slave", negroni.New(
-		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServersIsSlaveStatus)),
+	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/is-subordinate", negroni.New(
+		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServersIsSubordinateStatus)),
 	))
-	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/{serverPort}/is-master", negroni.New(
-		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServersPortIsMasterStatus)),
+	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/{serverPort}/is-main", negroni.New(
+		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServersPortIsMainStatus)),
 	))
 	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/{serverPort}/need-restart", negroni.New(
 		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServerNeedRestart)),
@@ -48,8 +48,8 @@ func (repman *ReplicationManager) apiDatabaseUnprotectedHandler(router *mux.Rout
 		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServerNeedRollingRestart)),
 	))
 
-	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/{serverPort}/is-slave", negroni.New(
-		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServersPortIsSlaveStatus)),
+	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/{serverPort}/is-subordinate", negroni.New(
+		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServersPortIsSubordinateStatus)),
 	))
 
 	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/{serverPort}/config", negroni.New(
@@ -112,13 +112,13 @@ func (repman *ReplicationManager) apiDatabaseProtectedHandler(router *mux.Router
 		negroni.HandlerFunc(repman.validateTokenMiddleware),
 		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServerInnoDBStatus)),
 	))
-	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/all-slaves-status", negroni.New(
+	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/all-subordinates-status", negroni.New(
 		negroni.HandlerFunc(repman.validateTokenMiddleware),
-		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServerAllSlavesStatus)),
+		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServerAllSubordinatesStatus)),
 	))
-	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/master-status", negroni.New(
+	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/main-status", negroni.New(
 		negroni.HandlerFunc(repman.validateTokenMiddleware),
-		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServerMasterStatus)),
+		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServerMainStatus)),
 	))
 	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/service-opensvc", negroni.New(
 		negroni.HandlerFunc(repman.validateTokenMiddleware),
@@ -238,13 +238,13 @@ func (repman *ReplicationManager) apiDatabaseProtectedHandler(router *mux.Router
 		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServerSwitchSqlErrorLog)),
 	))
 
-	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/actions/reset-master", negroni.New(
+	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/actions/reset-main", negroni.New(
 		negroni.HandlerFunc(repman.validateTokenMiddleware),
-		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServerResetMaster)),
+		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServerResetMain)),
 	))
-	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/actions/reset-slave-all", negroni.New(
+	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/actions/reset-subordinate-all", negroni.New(
 		negroni.HandlerFunc(repman.validateTokenMiddleware),
-		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServerResetSlaveAll)),
+		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServerResetSubordinateAll)),
 	))
 	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/actions/flush-logs", negroni.New(
 		negroni.HandlerFunc(repman.validateTokenMiddleware),
@@ -255,14 +255,14 @@ func (repman *ReplicationManager) apiDatabaseProtectedHandler(router *mux.Router
 		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServerResetPFSQueries)),
 	))
 
-	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/actions/start-slave", negroni.New(
+	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/actions/start-subordinate", negroni.New(
 		negroni.HandlerFunc(repman.validateTokenMiddleware),
-		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServerStartSlave)),
+		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServerStartSubordinate)),
 	))
 
-	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/actions/stop-slave", negroni.New(
+	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/actions/stop-subordinate", negroni.New(
 		negroni.HandlerFunc(repman.validateTokenMiddleware),
-		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServerStopSlave)),
+		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServerStopSubordinate)),
 	))
 
 	router.Handle("/api/clusters/{clusterName}/servers/{serverName}/actions/skip-replication-event", negroni.New(
@@ -530,7 +530,7 @@ func (repman *ReplicationManager) handlerMuxServerReseed(w http.ResponseWriter, 
 			if vars["backupMethod"] == "logicalbackup" {
 				node.JobReseedLogicalBackup()
 			}
-			if vars["backupMethod"] == "logicalmaster" {
+			if vars["backupMethod"] == "logicalmain" {
 				node.RejoinDirectDump()
 			}
 			if vars["backupMethod"] == "physicalbackup" {
@@ -731,7 +731,7 @@ func (repman *ReplicationManager) handlerMuxServerSwitchSqlErrorLog(w http.Respo
 	}
 }
 
-func (repman *ReplicationManager) handlerMuxServerStartSlave(w http.ResponseWriter, r *http.Request) {
+func (repman *ReplicationManager) handlerMuxServerStartSubordinate(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	vars := mux.Vars(r)
@@ -743,7 +743,7 @@ func (repman *ReplicationManager) handlerMuxServerStartSlave(w http.ResponseWrit
 		}
 		node := mycluster.GetServerFromName(vars["serverName"])
 		if node != nil {
-			node.StartSlave()
+			node.StartSubordinate()
 		} else {
 			http.Error(w, "Server Not Found", 500)
 			return
@@ -754,7 +754,7 @@ func (repman *ReplicationManager) handlerMuxServerStartSlave(w http.ResponseWrit
 	}
 }
 
-func (repman *ReplicationManager) handlerMuxServerStopSlave(w http.ResponseWriter, r *http.Request) {
+func (repman *ReplicationManager) handlerMuxServerStopSubordinate(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	vars := mux.Vars(r)
@@ -766,7 +766,7 @@ func (repman *ReplicationManager) handlerMuxServerStopSlave(w http.ResponseWrite
 		}
 		node := mycluster.GetServerFromName(vars["serverName"])
 		if node != nil {
-			node.StopSlave()
+			node.StopSubordinate()
 		} else {
 			http.Error(w, "Server Not Found", 500)
 			return
@@ -777,7 +777,7 @@ func (repman *ReplicationManager) handlerMuxServerStopSlave(w http.ResponseWrite
 	}
 }
 
-func (repman *ReplicationManager) handlerMuxServerResetSlaveAll(w http.ResponseWriter, r *http.Request) {
+func (repman *ReplicationManager) handlerMuxServerResetSubordinateAll(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	vars := mux.Vars(r)
@@ -789,8 +789,8 @@ func (repman *ReplicationManager) handlerMuxServerResetSlaveAll(w http.ResponseW
 		}
 		node := mycluster.GetServerFromName(vars["serverName"])
 		if node != nil {
-			node.StopSlave()
-			node.ResetSlave()
+			node.StopSubordinate()
+			node.ResetSubordinate()
 		} else {
 			http.Error(w, "Server Not Found", 500)
 			return
@@ -823,7 +823,7 @@ func (repman *ReplicationManager) handlerMuxServerFlushLogs(w http.ResponseWrite
 	}
 }
 
-func (repman *ReplicationManager) handlerMuxServerResetMaster(w http.ResponseWriter, r *http.Request) {
+func (repman *ReplicationManager) handlerMuxServerResetMain(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	vars := mux.Vars(r)
@@ -835,7 +835,7 @@ func (repman *ReplicationManager) handlerMuxServerResetMaster(w http.ResponseWri
 		}
 		node := mycluster.GetServerFromName(vars["serverName"])
 		if node != nil {
-			node.ResetMaster()
+			node.ResetMain()
 		} else {
 			http.Error(w, "Server Not Found", 500)
 			return
@@ -1044,7 +1044,7 @@ func (repman *ReplicationManager) handlerMuxServerUnprovision(w http.ResponseWri
 	}
 }
 
-func (repman *ReplicationManager) handlerMuxServersIsMasterStatus(w http.ResponseWriter, r *http.Request) {
+func (repman *ReplicationManager) handlerMuxServersIsMainStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	vars := mux.Vars(r)
 	mycluster := repman.getClusterByName(vars["clusterName"])
@@ -1054,12 +1054,12 @@ func (repman *ReplicationManager) handlerMuxServersIsMasterStatus(w http.Respons
 			return
 		}*/
 		node := mycluster.GetServerFromName(vars["serverName"])
-		if node != nil && mycluster.IsInFailover() == false && mycluster.IsActive() && node.IsMaster() && node.IsDown() == false && node.IsMaintenance == false && node.IsReadOnly() == false {
-			w.Write([]byte("200 -Valid Master!"))
+		if node != nil && mycluster.IsInFailover() == false && mycluster.IsActive() && node.IsMain() && node.IsDown() == false && node.IsMaintenance == false && node.IsReadOnly() == false {
+			w.Write([]byte("200 -Valid Main!"))
 			return
 		} else {
 
-			w.Write([]byte("503 -Not a Valid Master!"))
+			w.Write([]byte("503 -Not a Valid Main!"))
 		}
 	} else {
 		http.Error(w, "No cluster", 500)
@@ -1243,7 +1243,7 @@ func (repman *ReplicationManager) handlerMuxServerNeedRollingRestart(w http.Resp
 	}
 }
 
-func (repman *ReplicationManager) handlerMuxServersPortIsMasterStatus(w http.ResponseWriter, r *http.Request) {
+func (repman *ReplicationManager) handlerMuxServersPortIsMainStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	vars := mux.Vars(r)
 	mycluster := repman.getClusterByName(vars["clusterName"])
@@ -1258,13 +1258,13 @@ func (repman *ReplicationManager) handlerMuxServersPortIsMasterStatus(w http.Res
 			w.Write([]byte("503 -Node not Found!"))
 			return
 		}
-		if node != nil && mycluster.IsInFailover() == false && mycluster.IsActive() && node.IsMaster() && node.IsDown() == false && node.IsMaintenance == false && node.IsReadOnly() == false {
-			w.Write([]byte("200 -Valid Master!"))
+		if node != nil && mycluster.IsInFailover() == false && mycluster.IsActive() && node.IsMain() && node.IsDown() == false && node.IsMaintenance == false && node.IsReadOnly() == false {
+			w.Write([]byte("200 -Valid Main!"))
 			return
 
 		} else {
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("503 -Not a Valid Master!"))
+			w.Write([]byte("503 -Not a Valid Main!"))
 			return
 		}
 	} else {
@@ -1273,7 +1273,7 @@ func (repman *ReplicationManager) handlerMuxServersPortIsMasterStatus(w http.Res
 	}
 }
 
-func (repman *ReplicationManager) handlerMuxServersIsSlaveStatus(w http.ResponseWriter, r *http.Request) {
+func (repman *ReplicationManager) handlerMuxServersIsSubordinateStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	vars := mux.Vars(r)
 	mycluster := repman.getClusterByName(vars["clusterName"])
@@ -1283,12 +1283,12 @@ func (repman *ReplicationManager) handlerMuxServersIsSlaveStatus(w http.Response
 			return
 		}*/
 		node := mycluster.GetServerFromName(vars["serverName"])
-		if node != nil && mycluster.IsActive() && node.IsDown() == false && node.IsMaintenance == false && ((node.IsSlave && node.HasReplicationIssue() == false) || (node.IsMaster() && node.ClusterGroup.Conf.PRXServersReadOnMaster)) {
-			w.Write([]byte("200 -Valid Slave!"))
+		if node != nil && mycluster.IsActive() && node.IsDown() == false && node.IsMaintenance == false && ((node.IsSubordinate && node.HasReplicationIssue() == false) || (node.IsMain() && node.ClusterGroup.Conf.PRXServersReadOnMain)) {
+			w.Write([]byte("200 -Valid Subordinate!"))
 			return
 		} else {
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("503 -Not a Valid Slave!"))
+			w.Write([]byte("503 -Not a Valid Subordinate!"))
 		}
 
 	} else {
@@ -1298,7 +1298,7 @@ func (repman *ReplicationManager) handlerMuxServersIsSlaveStatus(w http.Response
 	}
 }
 
-func (repman *ReplicationManager) handlerMuxServersPortIsSlaveStatus(w http.ResponseWriter, r *http.Request) {
+func (repman *ReplicationManager) handlerMuxServersPortIsSubordinateStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	vars := mux.Vars(r)
 	mycluster := repman.getClusterByName(vars["clusterName"])
@@ -1308,13 +1308,13 @@ func (repman *ReplicationManager) handlerMuxServersPortIsSlaveStatus(w http.Resp
 				return
 			}*/
 		node := mycluster.GetServerFromURL(vars["serverName"] + ":" + vars["serverPort"])
-		if node != nil && mycluster.IsActive() && node.IsDown() == false && node.IsMaintenance == false && ((node.IsSlave && node.HasReplicationIssue() == false) || (node.IsMaster() && node.ClusterGroup.Conf.PRXServersReadOnMaster)) {
-			w.Write([]byte("200 -Valid Slave!"))
+		if node != nil && mycluster.IsActive() && node.IsDown() == false && node.IsMaintenance == false && ((node.IsSubordinate && node.HasReplicationIssue() == false) || (node.IsMain() && node.ClusterGroup.Conf.PRXServersReadOnMain)) {
+			w.Write([]byte("200 -Valid Subordinate!"))
 			return
 		} else {
 			//	w.WriteHeader(http.StatusInternalServerError)
-			http.Error(w, "-Not a Valid Slave!", 503)
-			//	w.Write([]byte("503 -Not a Valid Slave!"))
+			http.Error(w, "-Not a Valid Subordinate!", 503)
+			//	w.Write([]byte("503 -Not a Valid Subordinate!"))
 			return
 		}
 
@@ -1340,7 +1340,7 @@ func (repman *ReplicationManager) handlerMuxServersPortBackup(w http.ResponseWri
 			return
 		} else {
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(fmt.Sprintf("503 -Not a Valid Slave! Cluster IsActive=%t IsDown=%t IsMaintenance=%t HasReplicationIssue=%t ", mycluster.IsActive(), node.IsDown(), node.IsMaintenance, node.HasReplicationIssue())))
+			w.Write([]byte(fmt.Sprintf("503 -Not a Valid Subordinate! Cluster IsActive=%t IsDown=%t IsMaintenance=%t HasReplicationIssue=%t ", mycluster.IsActive(), node.IsDown(), node.IsMaintenance, node.HasReplicationIssue())))
 		}
 	} else {
 		http.Error(w, "No cluster", 500)
@@ -1849,7 +1849,7 @@ func (repman *ReplicationManager) handlerMuxServerInnoDBStatus(w http.ResponseWr
 	}
 }
 
-func (repman *ReplicationManager) handlerMuxServerAllSlavesStatus(w http.ResponseWriter, r *http.Request) {
+func (repman *ReplicationManager) handlerMuxServerAllSubordinatesStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	vars := mux.Vars(r)
 	mycluster := repman.getClusterByName(vars["clusterName"])
@@ -1862,7 +1862,7 @@ func (repman *ReplicationManager) handlerMuxServerAllSlavesStatus(w http.Respons
 		if node != nil && node.IsDown() == false {
 			e := json.NewEncoder(w)
 			e.SetIndent("", "\t")
-			l := node.GetAllSlavesStatus()
+			l := node.GetAllSubordinatesStatus()
 			err := e.Encode(l)
 			if err != nil {
 				http.Error(w, "Encoding error", 500)
@@ -1880,7 +1880,7 @@ func (repman *ReplicationManager) handlerMuxServerAllSlavesStatus(w http.Respons
 	}
 }
 
-func (repman *ReplicationManager) handlerMuxServerMasterStatus(w http.ResponseWriter, r *http.Request) {
+func (repman *ReplicationManager) handlerMuxServerMainStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	vars := mux.Vars(r)
 	mycluster := repman.getClusterByName(vars["clusterName"])
@@ -1893,7 +1893,7 @@ func (repman *ReplicationManager) handlerMuxServerMasterStatus(w http.ResponseWr
 		if node != nil && node.IsDown() == false {
 			e := json.NewEncoder(w)
 			e.SetIndent("", "\t")
-			l := node.GetMasterStatus()
+			l := node.GetMainStatus()
 			err := e.Encode(l)
 			if err != nil {
 				http.Error(w, "Encoding error", 500)

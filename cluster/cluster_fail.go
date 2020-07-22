@@ -24,10 +24,10 @@ import (
 	"github.com/signal18/replication-manager/utils/state"
 )
 
-// MasterFailover triggers a master switchover and returns the new master URL
-func (cluster *Cluster) MasterFailover(fail bool) bool {
-	if cluster.GetTopology() == topoMultiMasterRing || cluster.GetTopology() == topoMultiMasterWsrep {
-		res := cluster.VMasterFailover(fail)
+// MainFailover triggers a main switchover and returns the new main URL
+func (cluster *Cluster) MainFailover(fail bool) bool {
+	if cluster.GetTopology() == topoMultiMainRing || cluster.GetTopology() == topoMultiMainWsrep {
+		res := cluster.VMainFailover(fail)
 		return res
 	}
 	cluster.sme.SetFailoverState()
@@ -35,40 +35,40 @@ func (cluster *Cluster) MasterFailover(fail bool) bool {
 	var err error
 	if fail == false {
 		cluster.LogPrintf(LvlInfo, "--------------------------")
-		cluster.LogPrintf(LvlInfo, "Starting master switchover")
+		cluster.LogPrintf(LvlInfo, "Starting main switchover")
 		cluster.LogPrintf(LvlInfo, "--------------------------")
-		cluster.LogPrintf(LvlInfo, "Checking long running updates on master %d", cluster.Conf.SwitchWaitWrite)
-		if cluster.master == nil {
-			cluster.LogPrintf(LvlErr, "Cannot switchover without a master")
+		cluster.LogPrintf(LvlInfo, "Checking long running updates on main %d", cluster.Conf.SwitchWaitWrite)
+		if cluster.main == nil {
+			cluster.LogPrintf(LvlErr, "Cannot switchover without a main")
 			return false
 		}
-		if cluster.master.Conn == nil {
-			cluster.LogPrintf(LvlErr, "Cannot switchover without a master connection")
+		if cluster.main.Conn == nil {
+			cluster.LogPrintf(LvlErr, "Cannot switchover without a main connection")
 			return false
 		}
-		qt, logs, err := dbhelper.CheckLongRunningWrites(cluster.master.Conn, cluster.Conf.SwitchWaitWrite)
-		cluster.LogSQL(logs, err, cluster.master.URL, "MasterFailover", LvlDbg, "CheckLongRunningWrites")
+		qt, logs, err := dbhelper.CheckLongRunningWrites(cluster.main.Conn, cluster.Conf.SwitchWaitWrite)
+		cluster.LogSQL(logs, err, cluster.main.URL, "MainFailover", LvlDbg, "CheckLongRunningWrites")
 		if qt > 0 {
-			cluster.LogPrintf(LvlErr, "Long updates running on master. Cannot switchover")
+			cluster.LogPrintf(LvlErr, "Long updates running on main. Cannot switchover")
 			cluster.sme.RemoveFailoverState()
 			return false
 		}
 
-		cluster.LogPrintf(LvlInfo, "Flushing tables on master %s", cluster.master.URL)
+		cluster.LogPrintf(LvlInfo, "Flushing tables on main %s", cluster.main.URL)
 		workerFlushTable := make(chan error, 1)
-		if cluster.master.DBVersion.IsMariaDB() && cluster.master.DBVersion.Major > 10 && cluster.master.DBVersion.Minor >= 1 {
+		if cluster.main.DBVersion.IsMariaDB() && cluster.main.DBVersion.Major > 10 && cluster.main.DBVersion.Minor >= 1 {
 
 			go func() {
 				var err2 error
-				logs, err2 = dbhelper.MariaDBFlushTablesNoLogTimeout(cluster.master.Conn, strconv.FormatInt(cluster.Conf.SwitchWaitTrx+2, 10))
-				cluster.LogSQL(logs, err2, cluster.master.URL, "MasterFailover", LvlDbg, "MariaDBFlushTablesNoLogTimeout")
+				logs, err2 = dbhelper.MariaDBFlushTablesNoLogTimeout(cluster.main.Conn, strconv.FormatInt(cluster.Conf.SwitchWaitTrx+2, 10))
+				cluster.LogSQL(logs, err2, cluster.main.URL, "MainFailover", LvlDbg, "MariaDBFlushTablesNoLogTimeout")
 				workerFlushTable <- err2
 			}()
 		} else {
 			go func() {
 				var err2 error
-				logs, err2 = dbhelper.FlushTablesNoLog(cluster.master.Conn)
-				cluster.LogSQL(logs, err2, cluster.master.URL, "MasterFailover", LvlDbg, "FlushTablesNoLog")
+				logs, err2 = dbhelper.FlushTablesNoLog(cluster.main.Conn)
+				cluster.LogSQL(logs, err2, cluster.main.URL, "MainFailover", LvlDbg, "FlushTablesNoLog")
 				workerFlushTable <- err2
 			}()
 
@@ -77,28 +77,28 @@ func (cluster *Cluster) MasterFailover(fail bool) bool {
 		select {
 		case err = <-workerFlushTable:
 			if err != nil {
-				cluster.LogPrintf(LvlWarn, "Could not flush tables on master", err)
+				cluster.LogPrintf(LvlWarn, "Could not flush tables on main", err)
 			}
 		case <-time.After(time.Second * time.Duration(cluster.Conf.SwitchWaitTrx)):
-			cluster.LogPrintf(LvlErr, "Long running trx on master at least %d, can not switchover ", cluster.Conf.SwitchWaitTrx)
+			cluster.LogPrintf(LvlErr, "Long running trx on main at least %d, can not switchover ", cluster.Conf.SwitchWaitTrx)
 			cluster.sme.RemoveFailoverState()
 			return false
 		}
 
 	} else {
 		cluster.LogPrintf(LvlInfo, "------------------------")
-		cluster.LogPrintf(LvlInfo, "Starting master failover")
+		cluster.LogPrintf(LvlInfo, "Starting main failover")
 		cluster.LogPrintf(LvlInfo, "------------------------")
 	}
-	cluster.LogPrintf(LvlInfo, "Electing a new master")
-	for _, s := range cluster.slaves {
+	cluster.LogPrintf(LvlInfo, "Electing a new main")
+	for _, s := range cluster.subordinates {
 		s.Refresh()
 	}
 	key := -1
 	if fail {
-		key = cluster.electFailoverCandidate(cluster.slaves, true)
+		key = cluster.electFailoverCandidate(cluster.subordinates, true)
 	} else {
-		key = cluster.electSwitchoverCandidate(cluster.slaves, true)
+		key = cluster.electSwitchoverCandidate(cluster.subordinates, true)
 	}
 	if key == -1 {
 		cluster.LogPrintf(LvlErr, "No candidates found")
@@ -106,152 +106,152 @@ func (cluster *Cluster) MasterFailover(fail bool) bool {
 		return false
 	}
 
-	cluster.LogPrintf(LvlInfo, "Slave %s has been elected as a new master", cluster.slaves[key].URL)
-	if fail && !cluster.isSlaveElectable(cluster.slaves[key], true) {
-		cluster.LogPrintf(LvlInfo, "Elected slave have issue cancelling failover", cluster.slaves[key].URL)
+	cluster.LogPrintf(LvlInfo, "Subordinate %s has been elected as a new main", cluster.subordinates[key].URL)
+	if fail && !cluster.isSubordinateElectable(cluster.subordinates[key], true) {
+		cluster.LogPrintf(LvlInfo, "Elected subordinate have issue cancelling failover", cluster.subordinates[key].URL)
 		cluster.sme.RemoveFailoverState()
 		return false
 	}
 	// Shuffle the server list
 	var skey int
 	for k, server := range cluster.Servers {
-		if cluster.slaves[key].URL == server.URL {
+		if cluster.subordinates[key].URL == server.URL {
 			skey = k
 			break
 		}
 	}
-	cluster.oldMaster = cluster.master
-	cluster.master = cluster.Servers[skey]
-	cluster.master.State = stateMaster
-	if cluster.Conf.MultiMaster == false {
-		cluster.slaves[key].delete(&cluster.slaves)
+	cluster.oldMain = cluster.main
+	cluster.main = cluster.Servers[skey]
+	cluster.main.State = stateMain
+	if cluster.Conf.MultiMain == false {
+		cluster.subordinates[key].delete(&cluster.subordinates)
 	}
 	// Call pre-failover script
 	if cluster.Conf.PreScript != "" {
 		cluster.LogPrintf(LvlInfo, "Calling pre-failover script")
 		var out []byte
-		out, err = exec.Command(cluster.Conf.PreScript, cluster.oldMaster.Host, cluster.master.Host, cluster.oldMaster.Port, cluster.master.Port, cluster.oldMaster.MxsServerName, cluster.master.MxsServerName).CombinedOutput()
+		out, err = exec.Command(cluster.Conf.PreScript, cluster.oldMain.Host, cluster.main.Host, cluster.oldMain.Port, cluster.main.Port, cluster.oldMain.MxsServerName, cluster.main.MxsServerName).CombinedOutput()
 		if err != nil {
 			cluster.LogPrintf(LvlErr, "%s", err)
 		}
 		cluster.LogPrintf(LvlInfo, "Pre-failover script complete:", string(out))
 	}
 
-	// Phase 2: Reject updates and sync slaves on switchover
+	// Phase 2: Reject updates and sync subordinates on switchover
 	if fail == false {
 		if cluster.Conf.FailEventStatus {
-			for _, v := range cluster.master.EventStatus {
+			for _, v := range cluster.main.EventStatus {
 				if v.Status == 3 {
-					cluster.LogPrintf(LvlInfo, "Set DISABLE ON SLAVE for event %s %s on old master", v.Db, v.Name)
-					logs, err := dbhelper.SetEventStatus(cluster.oldMaster.Conn, v, 3)
-					cluster.LogSQL(logs, err, cluster.oldMaster.URL, "MasterFailover", LvlErr, "Could not Set DISABLE ON SLAVE for event %s %s on old master", v.Db, v.Name)
+					cluster.LogPrintf(LvlInfo, "Set DISABLE ON SLAVE for event %s %s on old main", v.Db, v.Name)
+					logs, err := dbhelper.SetEventStatus(cluster.oldMain.Conn, v, 3)
+					cluster.LogSQL(logs, err, cluster.oldMain.URL, "MainFailover", LvlErr, "Could not Set DISABLE ON SLAVE for event %s %s on old main", v.Db, v.Name)
 				}
 			}
 		}
 		if cluster.Conf.FailEventScheduler {
-			cluster.LogPrintf(LvlInfo, "Disable Event Scheduler on old master")
-			logs, err := dbhelper.SetEventScheduler(cluster.oldMaster.Conn, false, cluster.oldMaster.DBVersion)
-			cluster.LogSQL(logs, err, cluster.oldMaster.URL, "MasterFailover", LvlErr, "Could not disable event scheduler on old master")
+			cluster.LogPrintf(LvlInfo, "Disable Event Scheduler on old main")
+			logs, err := dbhelper.SetEventScheduler(cluster.oldMain.Conn, false, cluster.oldMain.DBVersion)
+			cluster.LogSQL(logs, err, cluster.oldMain.URL, "MainFailover", LvlErr, "Could not disable event scheduler on old main")
 		}
-		cluster.oldMaster.freeze()
-		cluster.LogPrintf(LvlInfo, "Rejecting updates on %s (old master)", cluster.oldMaster.URL)
-		logs, err := dbhelper.FlushTablesWithReadLock(cluster.oldMaster.Conn, cluster.oldMaster.DBVersion)
-		cluster.LogSQL(logs, err, cluster.oldMaster.URL, "MasterFailover", LvlErr, "Could not lock tables on %s (old master) %s", cluster.oldMaster.URL, err)
+		cluster.oldMain.freeze()
+		cluster.LogPrintf(LvlInfo, "Rejecting updates on %s (old main)", cluster.oldMain.URL)
+		logs, err := dbhelper.FlushTablesWithReadLock(cluster.oldMain.Conn, cluster.oldMain.DBVersion)
+		cluster.LogSQL(logs, err, cluster.oldMain.URL, "MainFailover", LvlErr, "Could not lock tables on %s (old main) %s", cluster.oldMain.URL, err)
 
 	}
-	// Sync candidate depending on the master status.
+	// Sync candidate depending on the main status.
 	// If it's a switchover, use MASTER_POS_WAIT to sync.
 	// If it's a failover, wait for the SQL thread to read all relay logs.
 	// If maxsclale we should wait for relay catch via old style
 	crash := new(Crash)
-	crash.URL = cluster.oldMaster.URL
-	crash.ElectedMasterURL = cluster.master.URL
+	crash.URL = cluster.oldMain.URL
+	crash.ElectedMainURL = cluster.main.URL
 
 	// if switchover on MariaDB Wait GTID
-	/*	if fail == false && cluster.Conf.MxsBinlogOn == false && cluster.master.DBVersion.IsMariaDB() {
-		cluster.LogPrintf(LvlInfo, "Waiting for candidate Master to synchronize")
-		cluster.oldMaster.Refresh()
+	/*	if fail == false && cluster.Conf.MxsBinlogOn == false && cluster.main.DBVersion.IsMariaDB() {
+		cluster.LogPrintf(LvlInfo, "Waiting for candidate Main to synchronize")
+		cluster.oldMain.Refresh()
 		if cluster.Conf.LogLevel > 2 {
-			cluster.LogPrintf(LvlDbg, "Syncing on master GTID Binlog Pos [%s]", cluster.oldMaster.GTIDBinlogPos.Sprint())
-			cluster.oldMaster.log()
+			cluster.LogPrintf(LvlDbg, "Syncing on main GTID Binlog Pos [%s]", cluster.oldMain.GTIDBinlogPos.Sprint())
+			cluster.oldMain.log()
 		}
-		dbhelper.MasterWaitGTID(cluster.master.Conn, cluster.oldMaster.GTIDBinlogPos.Sprint(), 30)
+		dbhelper.MainWaitGTID(cluster.main.Conn, cluster.oldMain.GTIDBinlogPos.Sprint(), 30)
 	} else {*/
 	// Failover
-	cluster.LogPrintf(LvlInfo, "Waiting for candidate master to apply relay log")
-	err = cluster.master.ReadAllRelayLogs()
+	cluster.LogPrintf(LvlInfo, "Waiting for candidate main to apply relay log")
+	err = cluster.main.ReadAllRelayLogs()
 	if err != nil {
 		cluster.LogPrintf(LvlErr, "Error while reading relay logs on candidate: %s", err)
 	}
 	cluster.LogPrintf(LvlDbg, "Save replication status before electing")
-	ms, err := cluster.master.GetSlaveStatus(cluster.master.ReplicationSourceName)
+	ms, err := cluster.main.GetSubordinateStatus(cluster.main.ReplicationSourceName)
 	if err != nil {
-		cluster.LogPrintf(LvlErr, "Failover can not fetch replication info on new master: %s", err)
+		cluster.LogPrintf(LvlErr, "Failover can not fetch replication info on new main: %s", err)
 	}
-	cluster.LogPrintf(LvlDbg, "master_log_file=%s", ms.MasterLogFile.String)
-	cluster.LogPrintf(LvlDbg, "master_log_pos=%s", ms.ReadMasterLogPos.String)
-	cluster.LogPrintf(LvlDbg, "Candidate was in sync=%t", cluster.master.SemiSyncSlaveStatus)
-	//		cluster.master.FailoverMasterLogFile = cluster.master.MasterLogFile
-	//		cluster.master.FailoverMasterLogPos = cluster.master.MasterLogPos
-	crash.FailoverMasterLogFile = ms.MasterLogFile.String
-	crash.FailoverMasterLogPos = ms.ReadMasterLogPos.String
-	crash.NewMasterLogFile = cluster.master.BinaryLogFile
-	crash.NewMasterLogPos = cluster.master.BinaryLogPos
-	if cluster.master.DBVersion.IsMariaDB() {
+	cluster.LogPrintf(LvlDbg, "main_log_file=%s", ms.MainLogFile.String)
+	cluster.LogPrintf(LvlDbg, "main_log_pos=%s", ms.ReadMainLogPos.String)
+	cluster.LogPrintf(LvlDbg, "Candidate was in sync=%t", cluster.main.SemiSyncSubordinateStatus)
+	//		cluster.main.FailoverMainLogFile = cluster.main.MainLogFile
+	//		cluster.main.FailoverMainLogPos = cluster.main.MainLogPos
+	crash.FailoverMainLogFile = ms.MainLogFile.String
+	crash.FailoverMainLogPos = ms.ReadMainLogPos.String
+	crash.NewMainLogFile = cluster.main.BinaryLogFile
+	crash.NewMainLogPos = cluster.main.BinaryLogPos
+	if cluster.main.DBVersion.IsMariaDB() {
 		if cluster.Conf.MxsBinlogOn {
-			//	cluster.master.FailoverIOGtid = cluster.master.CurrentGtid
-			crash.FailoverIOGtid = cluster.master.CurrentGtid
+			//	cluster.main.FailoverIOGtid = cluster.main.CurrentGtid
+			crash.FailoverIOGtid = cluster.main.CurrentGtid
 		} else {
-			//	cluster.master.FailoverIOGtid = gtid.NewList(ms.GtidIOPos.String)
+			//	cluster.main.FailoverIOGtid = gtid.NewList(ms.GtidIOPos.String)
 			crash.FailoverIOGtid = gtid.NewList(ms.GtidIOPos.String)
 		}
-	} else if cluster.master.DBVersion.IsMySQLOrPerconaGreater57() && cluster.master.HasGTIDReplication() {
+	} else if cluster.main.DBVersion.IsMySQLOrPerconaGreater57() && cluster.main.HasGTIDReplication() {
 		crash.FailoverIOGtid = gtid.NewMySQLList(ms.ExecutedGtidSet.String)
 	}
-	cluster.master.FailoverSemiSyncSlaveStatus = cluster.master.SemiSyncSlaveStatus
-	crash.FailoverSemiSyncSlaveStatus = cluster.master.SemiSyncSlaveStatus
+	cluster.main.FailoverSemiSyncSubordinateStatus = cluster.main.SemiSyncSubordinateStatus
+	crash.FailoverSemiSyncSubordinateStatus = cluster.main.SemiSyncSubordinateStatus
 	//}
 
 	// if relay server than failover and switchover converge to a new binlog  make this happen
-	var relaymaster *ServerMonitor
-	if cluster.Conf.MxsBinlogOn || cluster.Conf.MultiTierSlave {
-		cluster.LogPrintf(LvlInfo, "Candidate master has to catch up with relay server log position")
-		relaymaster = cluster.GetRelayServer()
-		if relaymaster != nil {
-			rs, err := relaymaster.GetSlaveStatus(relaymaster.ReplicationSourceName)
+	var relaymain *ServerMonitor
+	if cluster.Conf.MxsBinlogOn || cluster.Conf.MultiTierSubordinate {
+		cluster.LogPrintf(LvlInfo, "Candidate main has to catch up with relay server log position")
+		relaymain = cluster.GetRelayServer()
+		if relaymain != nil {
+			rs, err := relaymain.GetSubordinateStatus(relaymain.ReplicationSourceName)
 			if err != nil {
-				cluster.LogPrintf(LvlErr, "Can't find slave status on relay server %s", relaymaster.URL)
+				cluster.LogPrintf(LvlErr, "Can't find subordinate status on relay server %s", relaymain.URL)
 			}
-			relaymaster.Refresh()
+			relaymain.Refresh()
 
-			binlogfiletoreach, _ := strconv.Atoi(strings.Split(rs.MasterLogFile.String, ".")[1])
+			binlogfiletoreach, _ := strconv.Atoi(strings.Split(rs.MainLogFile.String, ".")[1])
 			cluster.LogPrintf(LvlInfo, "Relay server log pos reached %d", binlogfiletoreach)
-			logs, err := dbhelper.ResetMaster(cluster.master.Conn, cluster.Conf.MasterConn, cluster.master.DBVersion)
-			cluster.LogSQL(logs, err, cluster.master.URL, "MasterFailover", LvlInfo, "Reset Master on candidate Master")
+			logs, err := dbhelper.ResetMain(cluster.main.Conn, cluster.Conf.MainConn, cluster.main.DBVersion)
+			cluster.LogSQL(logs, err, cluster.main.URL, "MainFailover", LvlInfo, "Reset Main on candidate Main")
 			ctbinlog := 0
 			for ctbinlog < binlogfiletoreach {
 				ctbinlog++
-				logs, err := dbhelper.FlushLogs(cluster.master.Conn)
-				cluster.LogSQL(logs, err, cluster.master.URL, "MasterFailover", LvlInfo, "Flush Log on new Master %d", ctbinlog)
+				logs, err := dbhelper.FlushLogs(cluster.main.Conn)
+				cluster.LogSQL(logs, err, cluster.main.URL, "MainFailover", LvlInfo, "Flush Log on new Main %d", ctbinlog)
 			}
 			time.Sleep(2 * time.Second)
-			ms, logs, err := dbhelper.GetMasterStatus(cluster.master.Conn, cluster.master.DBVersion)
-			cluster.master.FailoverMasterLogFile = ms.File
-			cluster.master.FailoverMasterLogPos = "4"
-			crash.FailoverMasterLogFile = ms.File
-			crash.FailoverMasterLogPos = "4"
-			cluster.LogSQL(logs, err, cluster.master.URL, "MasterFailover", LvlInfo, "Backing up master pos %s %s", crash.FailoverMasterLogFile, crash.FailoverMasterLogPos)
+			ms, logs, err := dbhelper.GetMainStatus(cluster.main.Conn, cluster.main.DBVersion)
+			cluster.main.FailoverMainLogFile = ms.File
+			cluster.main.FailoverMainLogPos = "4"
+			crash.FailoverMainLogFile = ms.File
+			crash.FailoverMainLogPos = "4"
+			cluster.LogSQL(logs, err, cluster.main.URL, "MainFailover", LvlInfo, "Backing up main pos %s %s", crash.FailoverMainLogFile, crash.FailoverMainLogPos)
 
 		} else {
 			cluster.LogPrintf(LvlErr, "No relay server found")
 		}
 	}
-	// Phase 3: Prepare new master
-	if cluster.Conf.MultiMaster == false {
-		cluster.LogPrintf(LvlInfo, "Stopping slave threads on new master")
-		if cluster.master.DBVersion.IsMariaDB() || (cluster.master.DBVersion.IsMariaDB() == false && cluster.master.DBVersion.Minor < 7) {
-			logs, err := cluster.master.StopSlave()
-			cluster.LogSQL(logs, err, cluster.master.URL, "MasterFailover", LvlErr, "Failed stopping slave on new master %s %s", cluster.master.URL, err)
+	// Phase 3: Prepare new main
+	if cluster.Conf.MultiMain == false {
+		cluster.LogPrintf(LvlInfo, "Stopping subordinate threads on new main")
+		if cluster.main.DBVersion.IsMariaDB() || (cluster.main.DBVersion.IsMariaDB() == false && cluster.main.DBVersion.Minor < 7) {
+			logs, err := cluster.main.StopSubordinate()
+			cluster.LogSQL(logs, err, cluster.main.URL, "MainFailover", LvlErr, "Failed stopping subordinate on new main %s %s", cluster.main.URL, err)
 		}
 	}
 	cluster.Crashes = append(cluster.Crashes, crash)
@@ -259,394 +259,394 @@ func (cluster *Cluster) MasterFailover(fail bool) bool {
 	crash.Save(cluster.WorkingDir + "/failover." + t.Format("20060102150405") + ".json")
 	crash.Purge(cluster.WorkingDir, cluster.Conf.FailoverLogFileKeep)
 	cluster.Save()
-	// Call post-failover script before unlocking the old master.
+	// Call post-failover script before unlocking the old main.
 	if cluster.Conf.PostScript != "" {
 		cluster.LogPrintf(LvlInfo, "Calling post-failover script")
 		var out []byte
-		out, err = exec.Command(cluster.Conf.PostScript, cluster.oldMaster.Host, cluster.master.Host, cluster.oldMaster.Port, cluster.master.Port, cluster.oldMaster.MxsServerName, cluster.master.MxsServerName).CombinedOutput()
+		out, err = exec.Command(cluster.Conf.PostScript, cluster.oldMain.Host, cluster.main.Host, cluster.oldMain.Port, cluster.main.Port, cluster.oldMain.MxsServerName, cluster.main.MxsServerName).CombinedOutput()
 		if err != nil {
 			cluster.LogPrintf(LvlErr, "%s", err)
 		}
 		cluster.LogPrintf(LvlInfo, "Post-failover script complete", string(out))
 	}
 
-	if cluster.Conf.MultiMaster == false {
-		cluster.LogPrintf(LvlInfo, "Resetting slave on new master and set read/write mode on")
-		if cluster.master.DBVersion.IsMySQLOrPercona() {
+	if cluster.Conf.MultiMain == false {
+		cluster.LogPrintf(LvlInfo, "Resetting subordinate on new main and set read/write mode on")
+		if cluster.main.DBVersion.IsMySQLOrPercona() {
 			// Need to stop all threads to reset on MySQL
-			logs, err := cluster.master.StopSlave()
-			cluster.LogSQL(logs, err, cluster.master.URL, "MasterFailover", LvlErr, "Failed stop slave on new master %s %s", cluster.master.URL, err)
+			logs, err := cluster.main.StopSubordinate()
+			cluster.LogSQL(logs, err, cluster.main.URL, "MainFailover", LvlErr, "Failed stop subordinate on new main %s %s", cluster.main.URL, err)
 		}
 
-		logs, err := cluster.master.ResetSlave()
-		cluster.LogSQL(logs, err, cluster.master.URL, "MasterFailover", LvlErr, "Failed reset slave on new master %s %s", cluster.master.URL, err)
+		logs, err := cluster.main.ResetSubordinate()
+		cluster.LogSQL(logs, err, cluster.main.URL, "MainFailover", LvlErr, "Failed reset subordinate on new main %s %s", cluster.main.URL, err)
 	}
 	if fail == false {
 		// Get Fresh GTID pos before open traffic
-		cluster.master.Refresh()
+		cluster.main.Refresh()
 	}
-	err = cluster.master.SetReadWrite()
+	err = cluster.main.SetReadWrite()
 	if err != nil {
-		cluster.LogPrintf(LvlErr, "Could not set new master as read-write")
+		cluster.LogPrintf(LvlErr, "Could not set new main as read-write")
 	}
 	cluster.LogPrintf(LvlInfo, "Failover proxies")
 	cluster.failoverProxies()
-	cluster.LogPrintf(LvlInfo, "Waiting %ds for unmanaged proxy to monitor route change", cluster.Conf.SwitchSlaveWaitRouteChange)
-	time.Sleep(time.Duration(cluster.Conf.SwitchSlaveWaitRouteChange) * time.Second)
+	cluster.LogPrintf(LvlInfo, "Waiting %ds for unmanaged proxy to monitor route change", cluster.Conf.SwitchSubordinateWaitRouteChange)
+	time.Sleep(time.Duration(cluster.Conf.SwitchSubordinateWaitRouteChange) * time.Second)
 	if cluster.Conf.FailEventScheduler {
-		cluster.LogPrintf(LvlInfo, "Enable Event Scheduler on the new master")
-		logs, err := dbhelper.SetEventScheduler(cluster.master.Conn, true, cluster.master.DBVersion)
-		cluster.LogSQL(logs, err, cluster.master.URL, "MasterFailover", LvlErr, "Could not enable event scheduler on the new master")
+		cluster.LogPrintf(LvlInfo, "Enable Event Scheduler on the new main")
+		logs, err := dbhelper.SetEventScheduler(cluster.main.Conn, true, cluster.main.DBVersion)
+		cluster.LogSQL(logs, err, cluster.main.URL, "MainFailover", LvlErr, "Could not enable event scheduler on the new main")
 	}
 	if cluster.Conf.FailEventStatus {
-		for _, v := range cluster.master.EventStatus {
+		for _, v := range cluster.main.EventStatus {
 			if v.Status == 3 {
-				cluster.LogPrintf(LvlInfo, "Set ENABLE for event %s %s on new master", v.Db, v.Name)
-				logs, err := dbhelper.SetEventStatus(cluster.master.Conn, v, 1)
-				cluster.LogSQL(logs, err, cluster.master.URL, "MasterFailover", LvlErr, "Could not Set ENABLE for event %s %s on new master", v.Db, v.Name)
+				cluster.LogPrintf(LvlInfo, "Set ENABLE for event %s %s on new main", v.Db, v.Name)
+				logs, err := dbhelper.SetEventStatus(cluster.main.Conn, v, 1)
+				cluster.LogSQL(logs, err, cluster.main.URL, "MainFailover", LvlErr, "Could not Set ENABLE for event %s %s on new main", v.Db, v.Name)
 			}
 		}
 	}
-	// Insert a bogus transaction in order to have a new GTID pos on master
-	cluster.LogPrintf(LvlInfo, "Inject fake transaction on new master %s ", cluster.master.URL)
-	logs, err := dbhelper.FlushTables(cluster.master.Conn)
-	cluster.LogSQL(logs, err, cluster.master.URL, "MasterFailover", LvlErr, "Could not flush tables on new master for fake trx %s", err)
+	// Insert a bogus transaction in order to have a new GTID pos on main
+	cluster.LogPrintf(LvlInfo, "Inject fake transaction on new main %s ", cluster.main.URL)
+	logs, err := dbhelper.FlushTables(cluster.main.Conn)
+	cluster.LogSQL(logs, err, cluster.main.URL, "MainFailover", LvlErr, "Could not flush tables on new main for fake trx %s", err)
 
 	if fail == false {
 		// Get latest GTID pos
-		//cluster.master.Refresh() moved just before opening writes
-		cluster.oldMaster.Refresh()
+		//cluster.main.Refresh() moved just before opening writes
+		cluster.oldMain.Refresh()
 
 		// ********
-		// Phase 4: Demote old master to slave
+		// Phase 4: Demote old main to subordinate
 		// ********
-		cluster.LogPrintf(LvlInfo, "Killing new connections on old master showing before update route")
-		dbhelper.KillThreads(cluster.oldMaster.Conn, cluster.oldMaster.DBVersion)
-		cluster.LogPrintf(LvlInfo, "Switching old master as a slave")
-		logs, err := dbhelper.UnlockTables(cluster.oldMaster.Conn)
-		cluster.LogSQL(logs, err, cluster.oldMaster.URL, "MasterFailover", LvlErr, "Could not unlock tables on old master %s", err)
+		cluster.LogPrintf(LvlInfo, "Killing new connections on old main showing before update route")
+		dbhelper.KillThreads(cluster.oldMain.Conn, cluster.oldMain.DBVersion)
+		cluster.LogPrintf(LvlInfo, "Switching old main as a subordinate")
+		logs, err := dbhelper.UnlockTables(cluster.oldMain.Conn)
+		cluster.LogSQL(logs, err, cluster.oldMain.URL, "MainFailover", LvlErr, "Could not unlock tables on old main %s", err)
 
-		cluster.oldMaster.StopSlave() // This is helpful in some cases the old master can have an old replication running
-		one_shoot_slave_pos := false
-		if cluster.oldMaster.DBVersion.IsMariaDB() && cluster.oldMaster.HaveMariaDBGTID == false && cluster.oldMaster.DBVersion.Major >= 10 {
-			logs, err := dbhelper.SetGTIDSlavePos(cluster.oldMaster.Conn, cluster.master.GTIDBinlogPos.Sprint())
-			cluster.LogSQL(logs, err, cluster.oldMaster.URL, "MasterFailover", LvlErr, "Could not set old master gtid_slave_pos , reason: %s", err)
-			one_shoot_slave_pos = true
+		cluster.oldMain.StopSubordinate() // This is helpful in some cases the old main can have an old replication running
+		one_shoot_subordinate_pos := false
+		if cluster.oldMain.DBVersion.IsMariaDB() && cluster.oldMain.HaveMariaDBGTID == false && cluster.oldMain.DBVersion.Major >= 10 {
+			logs, err := dbhelper.SetGTIDSubordinatePos(cluster.oldMain.Conn, cluster.main.GTIDBinlogPos.Sprint())
+			cluster.LogSQL(logs, err, cluster.oldMain.URL, "MainFailover", LvlErr, "Could not set old main gtid_subordinate_pos , reason: %s", err)
+			one_shoot_subordinate_pos = true
 		}
-		hasMyGTID := cluster.oldMaster.HasMySQLGTID()
-		cluster.LogSQL(logs, err, cluster.oldMaster.URL, "MasterFailover", LvlErr, "Could not check old master GTID status: %s", err)
-		var changeMasterErr error
+		hasMyGTID := cluster.oldMain.HasMySQLGTID()
+		cluster.LogSQL(logs, err, cluster.oldMain.URL, "MainFailover", LvlErr, "Could not check old main GTID status: %s", err)
+		var changeMainErr error
 		// Do positional switch if we are not MariaDB and no using GTID
-		if cluster.oldMaster.DBVersion.IsMariaDB() == false && hasMyGTID == false {
-			cluster.LogPrintf(LvlInfo, "Doing positional switch of old Master")
-			logs, changeMasterErr = dbhelper.ChangeMaster(cluster.oldMaster.Conn, dbhelper.ChangeMasterOpt{
-				Host:        cluster.master.Host,
-				Port:        cluster.master.Port,
+		if cluster.oldMain.DBVersion.IsMariaDB() == false && hasMyGTID == false {
+			cluster.LogPrintf(LvlInfo, "Doing positional switch of old Main")
+			logs, changeMainErr = dbhelper.ChangeMain(cluster.oldMain.Conn, dbhelper.ChangeMainOpt{
+				Host:        cluster.main.Host,
+				Port:        cluster.main.Port,
 				User:        cluster.rplUser,
 				Password:    cluster.rplPass,
-				Logfile:     cluster.master.BinaryLogFile,
-				Logpos:      cluster.master.BinaryLogPos,
-				Retry:       strconv.Itoa(cluster.Conf.ForceSlaveHeartbeatRetry),
-				Heartbeat:   strconv.Itoa(cluster.Conf.ForceSlaveHeartbeatTime),
+				Logfile:     cluster.main.BinaryLogFile,
+				Logpos:      cluster.main.BinaryLogPos,
+				Retry:       strconv.Itoa(cluster.Conf.ForceSubordinateHeartbeatRetry),
+				Heartbeat:   strconv.Itoa(cluster.Conf.ForceSubordinateHeartbeatTime),
 				Mode:        "POSITIONAL",
 				SSL:         cluster.Conf.ReplicationSSL,
-				Channel:     cluster.Conf.MasterConn,
-				IsDelayed:   cluster.oldMaster.IsDelayed,
-				Delay:       strconv.Itoa(cluster.oldMaster.ClusterGroup.Conf.HostsDelayedTime),
-				PostgressDB: cluster.master.PostgressDB,
-			}, cluster.oldMaster.DBVersion)
-			cluster.LogSQL(logs, changeMasterErr, cluster.oldMaster.URL, "MasterFailover", LvlErr, "Change master failed on old master, reason:%s ", changeMasterErr)
+				Channel:     cluster.Conf.MainConn,
+				IsDelayed:   cluster.oldMain.IsDelayed,
+				Delay:       strconv.Itoa(cluster.oldMain.ClusterGroup.Conf.HostsDelayedTime),
+				PostgressDB: cluster.main.PostgressDB,
+			}, cluster.oldMain.DBVersion)
+			cluster.LogSQL(logs, changeMainErr, cluster.oldMain.URL, "MainFailover", LvlErr, "Change main failed on old main, reason:%s ", changeMainErr)
 
-			logs, err = cluster.oldMaster.StartSlave()
-			cluster.LogSQL(logs, err, cluster.oldMaster.URL, "MasterFailover", LvlErr, "Start slave failed on old master,%s reason:  %s ", cluster.oldMaster.URL, err)
+			logs, err = cluster.oldMain.StartSubordinate()
+			cluster.LogSQL(logs, err, cluster.oldMain.URL, "MainFailover", LvlErr, "Start subordinate failed on old main,%s reason:  %s ", cluster.oldMain.URL, err)
 
 		} else if hasMyGTID == true {
 			// We can do MySQL 5.7 style failover
-			cluster.LogPrintf(LvlInfo, "Doing MySQL GTID switch of the old master")
-			logs, changeMasterErr = dbhelper.ChangeMaster(cluster.oldMaster.Conn, dbhelper.ChangeMasterOpt{
-				Host:        cluster.master.Host,
-				Port:        cluster.master.Port,
+			cluster.LogPrintf(LvlInfo, "Doing MySQL GTID switch of the old main")
+			logs, changeMainErr = dbhelper.ChangeMain(cluster.oldMain.Conn, dbhelper.ChangeMainOpt{
+				Host:        cluster.main.Host,
+				Port:        cluster.main.Port,
 				User:        cluster.rplUser,
 				Password:    cluster.rplPass,
-				Retry:       strconv.Itoa(cluster.Conf.ForceSlaveHeartbeatRetry),
-				Heartbeat:   strconv.Itoa(cluster.Conf.ForceSlaveHeartbeatTime),
+				Retry:       strconv.Itoa(cluster.Conf.ForceSubordinateHeartbeatRetry),
+				Heartbeat:   strconv.Itoa(cluster.Conf.ForceSubordinateHeartbeatTime),
 				Mode:        "MASTER_AUTO_POSITION",
 				SSL:         cluster.Conf.ReplicationSSL,
-				Channel:     cluster.Conf.MasterConn,
-				IsDelayed:   cluster.oldMaster.IsDelayed,
-				Delay:       strconv.Itoa(cluster.oldMaster.ClusterGroup.Conf.HostsDelayedTime),
-				PostgressDB: cluster.master.PostgressDB,
-			}, cluster.oldMaster.DBVersion)
-			cluster.LogSQL(logs, changeMasterErr, cluster.oldMaster.URL, "MasterFailover", LvlErr, "Change master failed on old master %s", logs)
-			logs, err = cluster.oldMaster.StartSlave()
-			cluster.LogSQL(logs, err, cluster.oldMaster.URL, "MasterFailover", LvlErr, "Start slave failed on old master,%s reason:  %s ", cluster.oldMaster.URL, err)
+				Channel:     cluster.Conf.MainConn,
+				IsDelayed:   cluster.oldMain.IsDelayed,
+				Delay:       strconv.Itoa(cluster.oldMain.ClusterGroup.Conf.HostsDelayedTime),
+				PostgressDB: cluster.main.PostgressDB,
+			}, cluster.oldMain.DBVersion)
+			cluster.LogSQL(logs, changeMainErr, cluster.oldMain.URL, "MainFailover", LvlErr, "Change main failed on old main %s", logs)
+			logs, err = cluster.oldMain.StartSubordinate()
+			cluster.LogSQL(logs, err, cluster.oldMain.URL, "MainFailover", LvlErr, "Start subordinate failed on old main,%s reason:  %s ", cluster.oldMain.URL, err)
 		} else if cluster.Conf.MxsBinlogOn == false {
-			cluster.LogPrintf(LvlInfo, "Doing MariaDB GTID switch of the old master")
-			// current pos is needed on old master as writes diverges from slave pos
-			// if gtid_slave_pos was forced use slave_pos : positional to GTID promotion
-			if one_shoot_slave_pos {
-				logs, changeMasterErr = dbhelper.ChangeMaster(cluster.oldMaster.Conn, dbhelper.ChangeMasterOpt{
-					Host:        cluster.master.Host,
-					Port:        cluster.master.Port,
+			cluster.LogPrintf(LvlInfo, "Doing MariaDB GTID switch of the old main")
+			// current pos is needed on old main as writes diverges from subordinate pos
+			// if gtid_subordinate_pos was forced use subordinate_pos : positional to GTID promotion
+			if one_shoot_subordinate_pos {
+				logs, changeMainErr = dbhelper.ChangeMain(cluster.oldMain.Conn, dbhelper.ChangeMainOpt{
+					Host:        cluster.main.Host,
+					Port:        cluster.main.Port,
 					User:        cluster.rplUser,
 					Password:    cluster.rplPass,
-					Retry:       strconv.Itoa(cluster.Conf.ForceSlaveHeartbeatRetry),
-					Heartbeat:   strconv.Itoa(cluster.Conf.ForceSlaveHeartbeatTime),
+					Retry:       strconv.Itoa(cluster.Conf.ForceSubordinateHeartbeatRetry),
+					Heartbeat:   strconv.Itoa(cluster.Conf.ForceSubordinateHeartbeatTime),
 					Mode:        "SLAVE_POS",
 					SSL:         cluster.Conf.ReplicationSSL,
-					Channel:     cluster.Conf.MasterConn,
-					IsDelayed:   cluster.oldMaster.IsDelayed,
-					Delay:       strconv.Itoa(cluster.oldMaster.ClusterGroup.Conf.HostsDelayedTime),
-					PostgressDB: cluster.master.PostgressDB,
-				}, cluster.oldMaster.DBVersion)
+					Channel:     cluster.Conf.MainConn,
+					IsDelayed:   cluster.oldMain.IsDelayed,
+					Delay:       strconv.Itoa(cluster.oldMain.ClusterGroup.Conf.HostsDelayedTime),
+					PostgressDB: cluster.main.PostgressDB,
+				}, cluster.oldMain.DBVersion)
 			} else {
-				logs, changeMasterErr = dbhelper.ChangeMaster(cluster.oldMaster.Conn, dbhelper.ChangeMasterOpt{
-					Host:        cluster.master.Host,
-					Port:        cluster.master.Port,
+				logs, changeMainErr = dbhelper.ChangeMain(cluster.oldMain.Conn, dbhelper.ChangeMainOpt{
+					Host:        cluster.main.Host,
+					Port:        cluster.main.Port,
 					User:        cluster.rplUser,
 					Password:    cluster.rplPass,
-					Retry:       strconv.Itoa(cluster.Conf.ForceSlaveHeartbeatRetry),
-					Heartbeat:   strconv.Itoa(cluster.Conf.ForceSlaveHeartbeatTime),
+					Retry:       strconv.Itoa(cluster.Conf.ForceSubordinateHeartbeatRetry),
+					Heartbeat:   strconv.Itoa(cluster.Conf.ForceSubordinateHeartbeatTime),
 					Mode:        "CURRENT_POS",
 					SSL:         cluster.Conf.ReplicationSSL,
-					Channel:     cluster.Conf.MasterConn,
-					IsDelayed:   cluster.oldMaster.IsDelayed,
-					Delay:       strconv.Itoa(cluster.oldMaster.ClusterGroup.Conf.HostsDelayedTime),
-					PostgressDB: cluster.master.PostgressDB,
-				}, cluster.oldMaster.DBVersion)
+					Channel:     cluster.Conf.MainConn,
+					IsDelayed:   cluster.oldMain.IsDelayed,
+					Delay:       strconv.Itoa(cluster.oldMain.ClusterGroup.Conf.HostsDelayedTime),
+					PostgressDB: cluster.main.PostgressDB,
+				}, cluster.oldMain.DBVersion)
 			}
-			cluster.LogSQL(logs, changeMasterErr, cluster.oldMaster.URL, "MasterFailover", LvlErr, "Change master failed on old master %s", changeMasterErr)
-			logs, err = cluster.oldMaster.StartSlave()
-			cluster.LogSQL(logs, err, cluster.oldMaster.URL, "MasterFailover", LvlErr, "Start slave failed on old master,%s reason:  %s ", cluster.oldMaster.URL, err)
+			cluster.LogSQL(logs, changeMainErr, cluster.oldMain.URL, "MainFailover", LvlErr, "Change main failed on old main %s", changeMainErr)
+			logs, err = cluster.oldMain.StartSubordinate()
+			cluster.LogSQL(logs, err, cluster.oldMain.URL, "MainFailover", LvlErr, "Start subordinate failed on old main,%s reason:  %s ", cluster.oldMain.URL, err)
 		} else {
-			// Don't start slave until the relay as been point to new master
-			cluster.LogPrintf(LvlInfo, "Pointing old master to relay server")
-			if relaymaster.MxsHaveGtid {
-				logs, err = dbhelper.ChangeMaster(cluster.oldMaster.Conn, dbhelper.ChangeMasterOpt{
-					Host:        relaymaster.Host,
-					Port:        relaymaster.Port,
+			// Don't start subordinate until the relay as been point to new main
+			cluster.LogPrintf(LvlInfo, "Pointing old main to relay server")
+			if relaymain.MxsHaveGtid {
+				logs, err = dbhelper.ChangeMain(cluster.oldMain.Conn, dbhelper.ChangeMainOpt{
+					Host:        relaymain.Host,
+					Port:        relaymain.Port,
 					User:        cluster.rplUser,
 					Password:    cluster.rplPass,
-					Retry:       strconv.Itoa(cluster.Conf.ForceSlaveHeartbeatRetry),
-					Heartbeat:   strconv.Itoa(cluster.Conf.ForceSlaveHeartbeatTime),
+					Retry:       strconv.Itoa(cluster.Conf.ForceSubordinateHeartbeatRetry),
+					Heartbeat:   strconv.Itoa(cluster.Conf.ForceSubordinateHeartbeatTime),
 					Mode:        "SLAVE_POS",
 					SSL:         cluster.Conf.ReplicationSSL,
-					Channel:     cluster.Conf.MasterConn,
-					IsDelayed:   cluster.oldMaster.IsDelayed,
-					Delay:       strconv.Itoa(cluster.oldMaster.ClusterGroup.Conf.HostsDelayedTime),
-					PostgressDB: relaymaster.PostgressDB,
-				}, cluster.oldMaster.DBVersion)
+					Channel:     cluster.Conf.MainConn,
+					IsDelayed:   cluster.oldMain.IsDelayed,
+					Delay:       strconv.Itoa(cluster.oldMain.ClusterGroup.Conf.HostsDelayedTime),
+					PostgressDB: relaymain.PostgressDB,
+				}, cluster.oldMain.DBVersion)
 			} else {
-				logs, err = dbhelper.ChangeMaster(cluster.oldMaster.Conn, dbhelper.ChangeMasterOpt{
-					Host:        relaymaster.Host,
-					Port:        relaymaster.Port,
+				logs, err = dbhelper.ChangeMain(cluster.oldMain.Conn, dbhelper.ChangeMainOpt{
+					Host:        relaymain.Host,
+					Port:        relaymain.Port,
 					User:        cluster.rplUser,
 					Password:    cluster.rplPass,
-					Retry:       strconv.Itoa(cluster.Conf.ForceSlaveHeartbeatRetry),
-					Heartbeat:   strconv.Itoa(cluster.Conf.ForceSlaveHeartbeatTime),
+					Retry:       strconv.Itoa(cluster.Conf.ForceSubordinateHeartbeatRetry),
+					Heartbeat:   strconv.Itoa(cluster.Conf.ForceSubordinateHeartbeatTime),
 					Mode:        "POSITIONAL",
-					Logfile:     crash.FailoverMasterLogFile,
-					Logpos:      crash.FailoverMasterLogPos,
+					Logfile:     crash.FailoverMainLogFile,
+					Logpos:      crash.FailoverMainLogPos,
 					SSL:         cluster.Conf.ReplicationSSL,
-					Channel:     cluster.Conf.MasterConn,
-					IsDelayed:   cluster.oldMaster.IsDelayed,
-					Delay:       strconv.Itoa(cluster.oldMaster.ClusterGroup.Conf.HostsDelayedTime),
-					PostgressDB: relaymaster.PostgressDB,
-				}, cluster.oldMaster.DBVersion)
+					Channel:     cluster.Conf.MainConn,
+					IsDelayed:   cluster.oldMain.IsDelayed,
+					Delay:       strconv.Itoa(cluster.oldMain.ClusterGroup.Conf.HostsDelayedTime),
+					PostgressDB: relaymain.PostgressDB,
+				}, cluster.oldMain.DBVersion)
 			}
 		}
-		cluster.LogSQL(logs, err, cluster.oldMaster.URL, "MasterFailover", LvlErr, "Change master failed on old master %s", err)
+		cluster.LogSQL(logs, err, cluster.oldMain.URL, "MainFailover", LvlErr, "Change main failed on old main %s", err)
 
 		if cluster.Conf.ReadOnly {
-			logs, err = dbhelper.SetReadOnly(cluster.oldMaster.Conn, true)
-			cluster.LogSQL(logs, err, cluster.oldMaster.URL, "MasterFailover", LvlErr, "Could not set old master as read-only, %s", err)
+			logs, err = dbhelper.SetReadOnly(cluster.oldMain.Conn, true)
+			cluster.LogSQL(logs, err, cluster.oldMain.URL, "MainFailover", LvlErr, "Could not set old main as read-only, %s", err)
 
 		} else {
-			logs, err = dbhelper.SetReadOnly(cluster.oldMaster.Conn, false)
-			cluster.LogSQL(logs, err, cluster.oldMaster.URL, "MasterFailover", LvlErr, "Could not set old master as read-write, %s", err)
+			logs, err = dbhelper.SetReadOnly(cluster.oldMain.Conn, false)
+			cluster.LogSQL(logs, err, cluster.oldMain.URL, "MainFailover", LvlErr, "Could not set old main as read-write, %s", err)
 		}
 		if cluster.Conf.SwitchDecreaseMaxConn {
 
-			logs, err := dbhelper.SetMaxConnections(cluster.oldMaster.Conn, cluster.oldMaster.maxConn, cluster.oldMaster.DBVersion)
-			cluster.LogSQL(logs, err, cluster.oldMaster.URL, "MasterFailover", LvlErr, "Could not set max connection, %s", err)
+			logs, err := dbhelper.SetMaxConnections(cluster.oldMain.Conn, cluster.oldMain.maxConn, cluster.oldMain.DBVersion)
+			cluster.LogSQL(logs, err, cluster.oldMain.URL, "MainFailover", LvlErr, "Could not set max connection, %s", err)
 
 		}
-		// Add the old master to the slaves list
+		// Add the old main to the subordinates list
 
-		cluster.oldMaster.State = stateSlave
-		if cluster.Conf.MultiMaster == false {
-			cluster.slaves = append(cluster.slaves, cluster.oldMaster)
+		cluster.oldMain.State = stateSubordinate
+		if cluster.Conf.MultiMain == false {
+			cluster.subordinates = append(cluster.subordinates, cluster.oldMain)
 		}
 	}
 
 	// ********
-	// Phase 5: Switch slaves to new master
+	// Phase 5: Switch subordinates to new main
 	// ********
 
-	cluster.LogPrintf(LvlInfo, "Switching other slaves to the new master")
-	for _, sl := range cluster.slaves {
-		// Don't switch if slave was the old master or is in a multiple master setup or with relay server.
-		if sl.URL == cluster.oldMaster.URL || sl.State == stateMaster || (sl.IsRelay == false && cluster.Conf.MxsBinlogOn == true) {
+	cluster.LogPrintf(LvlInfo, "Switching other subordinates to the new main")
+	for _, sl := range cluster.subordinates {
+		// Don't switch if subordinate was the old main or is in a multiple main setup or with relay server.
+		if sl.URL == cluster.oldMain.URL || sl.State == stateMain || (sl.IsRelay == false && cluster.Conf.MxsBinlogOn == true) {
 			continue
 		}
-		// maxscale is in the list of slave
+		// maxscale is in the list of subordinate
 
-		if fail == false && cluster.Conf.MxsBinlogOn == false && cluster.Conf.SwitchSlaveWaitCatch {
-			sl.WaitSyncToMaster(cluster.oldMaster)
+		if fail == false && cluster.Conf.MxsBinlogOn == false && cluster.Conf.SwitchSubordinateWaitCatch {
+			sl.WaitSyncToMain(cluster.oldMain)
 		}
-		cluster.LogPrintf(LvlInfo, "Change master on slave %s", sl.URL)
-		logs, err = sl.StopSlave()
-		cluster.LogSQL(logs, err, cluster.oldMaster.URL, "MasterFailover", LvlErr, "Could not stop slave on server %s, %s", sl.URL, err)
-		if fail == false && cluster.Conf.MxsBinlogOn == false && cluster.Conf.SwitchSlaveWaitCatch {
+		cluster.LogPrintf(LvlInfo, "Change main on subordinate %s", sl.URL)
+		logs, err = sl.StopSubordinate()
+		cluster.LogSQL(logs, err, cluster.oldMain.URL, "MainFailover", LvlErr, "Could not stop subordinate on server %s, %s", sl.URL, err)
+		if fail == false && cluster.Conf.MxsBinlogOn == false && cluster.Conf.SwitchSubordinateWaitCatch {
 			if cluster.Conf.FailForceGtid && sl.DBVersion.IsMariaDB() {
-				logs, err := dbhelper.SetGTIDSlavePos(sl.Conn, cluster.oldMaster.GTIDBinlogPos.Sprint())
-				cluster.LogSQL(logs, err, sl.URL, "MasterFailover", LvlErr, "Could not set gtid_slave_pos on slave %s, %s", sl.URL, err)
+				logs, err := dbhelper.SetGTIDSubordinatePos(sl.Conn, cluster.oldMain.GTIDBinlogPos.Sprint())
+				cluster.LogSQL(logs, err, sl.URL, "MainFailover", LvlErr, "Could not set gtid_subordinate_pos on subordinate %s, %s", sl.URL, err)
 			}
 		}
-		hasMyGTID := cluster.master.HasMySQLGTID()
+		hasMyGTID := cluster.main.HasMySQLGTID()
 
-		var changeMasterErr error
+		var changeMainErr error
 
 		// Not MariaDB and not using MySQL GTID, 2.0 stop doing any thing until pseudo GTID
 		if sl.DBVersion.IsMariaDB() == false && hasMyGTID == false {
 
-			if cluster.Conf.AutorejoinSlavePositionalHeartbeat == true {
+			if cluster.Conf.AutorejoinSubordinatePositionalHeartbeat == true {
 
 				pseudoGTID, logs, err := sl.GetLastPseudoGTID()
-				cluster.LogSQL(logs, err, sl.URL, "MasterFailover", LvlErr, "Could not get pseudoGTID on slave %s, %s", sl.URL, err)
+				cluster.LogSQL(logs, err, sl.URL, "MainFailover", LvlErr, "Could not get pseudoGTID on subordinate %s, %s", sl.URL, err)
 				cluster.LogPrintf(LvlInfo, "Found pseudoGTID %s", pseudoGTID)
 				slFile, slPos, logs, err := sl.GetBinlogPosFromPseudoGTID(pseudoGTID)
-				cluster.LogSQL(logs, err, sl.URL, "MasterFailover", LvlErr, "Could not find pseudoGTID in slave %s, %s", sl.URL, err)
-				cluster.LogPrintf(LvlInfo, "Found Coordinates on slave %s, %s", slFile, slPos)
+				cluster.LogSQL(logs, err, sl.URL, "MainFailover", LvlErr, "Could not find pseudoGTID in subordinate %s, %s", sl.URL, err)
+				cluster.LogPrintf(LvlInfo, "Found Coordinates on subordinate %s, %s", slFile, slPos)
 				slSkip, logs, err := sl.GetNumberOfEventsAfterPos(slFile, slPos)
-				cluster.LogSQL(logs, err, sl.URL, "MasterFailover", LvlErr, "Could not find number of events after pseudoGTID in slave %s, %s", sl.URL, err)
-				cluster.LogPrintf(LvlInfo, "Found %d events to skip after coordinates on slave %s,%s", slSkip, slFile, slPos)
+				cluster.LogSQL(logs, err, sl.URL, "MainFailover", LvlErr, "Could not find number of events after pseudoGTID in subordinate %s, %s", sl.URL, err)
+				cluster.LogPrintf(LvlInfo, "Found %d events to skip after coordinates on subordinate %s,%s", slSkip, slFile, slPos)
 
-				mFile, mPos, logs, err := cluster.master.GetBinlogPosFromPseudoGTID(pseudoGTID)
-				cluster.LogSQL(logs, err, cluster.master.URL, "MasterFailover", LvlErr, "Could not find pseudoGTID in master %s, %s", cluster.master.URL, err)
-				cluster.LogPrintf(LvlInfo, "Found coordinate on master %s ,%s", mFile, mPos)
-				mFile, mPos, logs, err = cluster.master.GetBinlogPosAfterSkipNumberOfEvents(mFile, mPos, slSkip)
-				cluster.LogSQL(logs, err, cluster.master.URL, "MasterFailover", LvlErr, "Could not skip event after pseudoGTID in master %s, %s", cluster.master.URL, err)
-				cluster.LogPrintf(LvlInfo, "Found skip coordinate on master %s, %s", mFile, mPos)
+				mFile, mPos, logs, err := cluster.main.GetBinlogPosFromPseudoGTID(pseudoGTID)
+				cluster.LogSQL(logs, err, cluster.main.URL, "MainFailover", LvlErr, "Could not find pseudoGTID in main %s, %s", cluster.main.URL, err)
+				cluster.LogPrintf(LvlInfo, "Found coordinate on main %s ,%s", mFile, mPos)
+				mFile, mPos, logs, err = cluster.main.GetBinlogPosAfterSkipNumberOfEvents(mFile, mPos, slSkip)
+				cluster.LogSQL(logs, err, cluster.main.URL, "MainFailover", LvlErr, "Could not skip event after pseudoGTID in main %s, %s", cluster.main.URL, err)
+				cluster.LogPrintf(LvlInfo, "Found skip coordinate on main %s, %s", mFile, mPos)
 
-				cluster.LogPrintf(LvlInfo, "Doing Positional switch of slave %s", sl.URL)
-				logs, changeMasterErr = dbhelper.ChangeMaster(sl.Conn, dbhelper.ChangeMasterOpt{
-					Host:        cluster.master.Host,
-					Port:        cluster.master.Port,
+				cluster.LogPrintf(LvlInfo, "Doing Positional switch of subordinate %s", sl.URL)
+				logs, changeMainErr = dbhelper.ChangeMain(sl.Conn, dbhelper.ChangeMainOpt{
+					Host:        cluster.main.Host,
+					Port:        cluster.main.Port,
 					User:        cluster.rplUser,
 					Password:    cluster.rplPass,
 					Logfile:     mFile,
 					Logpos:      mPos,
-					Retry:       strconv.Itoa(cluster.Conf.ForceSlaveHeartbeatRetry),
-					Heartbeat:   strconv.Itoa(cluster.Conf.ForceSlaveHeartbeatTime),
+					Retry:       strconv.Itoa(cluster.Conf.ForceSubordinateHeartbeatRetry),
+					Heartbeat:   strconv.Itoa(cluster.Conf.ForceSubordinateHeartbeatTime),
 					Mode:        "POSITIONAL",
 					SSL:         cluster.Conf.ReplicationSSL,
-					Channel:     cluster.Conf.MasterConn,
+					Channel:     cluster.Conf.MainConn,
 					IsDelayed:   sl.IsDelayed,
 					Delay:       strconv.Itoa(sl.ClusterGroup.Conf.HostsDelayedTime),
-					PostgressDB: cluster.master.PostgressDB,
+					PostgressDB: cluster.main.PostgressDB,
 				}, sl.DBVersion)
 			} else {
 				sl.SetMaintenance()
 			}
-			// do nothing stay connected to dead master proceed with relay fix later
+			// do nothing stay connected to dead main proceed with relay fix later
 
-		} else if cluster.oldMaster.DBVersion.IsMySQLOrPerconaGreater57() && hasMyGTID == true {
-			logs, changeMasterErr = dbhelper.ChangeMaster(sl.Conn, dbhelper.ChangeMasterOpt{
-				Host:        cluster.master.Host,
-				Port:        cluster.master.Port,
+		} else if cluster.oldMain.DBVersion.IsMySQLOrPerconaGreater57() && hasMyGTID == true {
+			logs, changeMainErr = dbhelper.ChangeMain(sl.Conn, dbhelper.ChangeMainOpt{
+				Host:        cluster.main.Host,
+				Port:        cluster.main.Port,
 				User:        cluster.rplUser,
 				Password:    cluster.rplPass,
-				Retry:       strconv.Itoa(cluster.Conf.ForceSlaveHeartbeatRetry),
-				Heartbeat:   strconv.Itoa(cluster.Conf.ForceSlaveHeartbeatTime),
+				Retry:       strconv.Itoa(cluster.Conf.ForceSubordinateHeartbeatRetry),
+				Heartbeat:   strconv.Itoa(cluster.Conf.ForceSubordinateHeartbeatTime),
 				Mode:        "MASTER_AUTO_POSITION",
 				SSL:         cluster.Conf.ReplicationSSL,
-				Channel:     cluster.Conf.MasterConn,
+				Channel:     cluster.Conf.MainConn,
 				IsDelayed:   sl.IsDelayed,
 				Delay:       strconv.Itoa(sl.ClusterGroup.Conf.HostsDelayedTime),
-				PostgressDB: cluster.master.PostgressDB,
+				PostgressDB: cluster.main.PostgressDB,
 			}, sl.DBVersion)
 		} else if cluster.Conf.MxsBinlogOn == false {
 			//MariaDB all cases use GTID
 
-			logs, changeMasterErr = dbhelper.ChangeMaster(sl.Conn, dbhelper.ChangeMasterOpt{
-				Host:        cluster.master.Host,
-				Port:        cluster.master.Port,
+			logs, changeMainErr = dbhelper.ChangeMain(sl.Conn, dbhelper.ChangeMainOpt{
+				Host:        cluster.main.Host,
+				Port:        cluster.main.Port,
 				User:        cluster.rplUser,
 				Password:    cluster.rplPass,
-				Retry:       strconv.Itoa(cluster.Conf.ForceSlaveHeartbeatRetry),
-				Heartbeat:   strconv.Itoa(cluster.Conf.ForceSlaveHeartbeatTime),
+				Retry:       strconv.Itoa(cluster.Conf.ForceSubordinateHeartbeatRetry),
+				Heartbeat:   strconv.Itoa(cluster.Conf.ForceSubordinateHeartbeatTime),
 				Mode:        "SLAVE_POS",
 				SSL:         cluster.Conf.ReplicationSSL,
-				Channel:     cluster.Conf.MasterConn,
+				Channel:     cluster.Conf.MainConn,
 				IsDelayed:   sl.IsDelayed,
 				Delay:       strconv.Itoa(sl.ClusterGroup.Conf.HostsDelayedTime),
-				PostgressDB: cluster.master.PostgressDB,
+				PostgressDB: cluster.main.PostgressDB,
 			}, sl.DBVersion)
 		} else { // We deduct we are in maxscale binlog server , but can have support for GTID or not
 
-			cluster.LogPrintf(LvlInfo, "Pointing relay to the new master: %s:%s", cluster.master.Host, cluster.master.Port)
+			cluster.LogPrintf(LvlInfo, "Pointing relay to the new main: %s:%s", cluster.main.Host, cluster.main.Port)
 			if sl.MxsHaveGtid {
-				logs, changeMasterErr = dbhelper.ChangeMaster(sl.Conn, dbhelper.ChangeMasterOpt{
-					Host:        cluster.master.Host,
-					Port:        cluster.master.Port,
+				logs, changeMainErr = dbhelper.ChangeMain(sl.Conn, dbhelper.ChangeMainOpt{
+					Host:        cluster.main.Host,
+					Port:        cluster.main.Port,
 					User:        cluster.rplUser,
 					Password:    cluster.rplPass,
-					Retry:       strconv.Itoa(cluster.Conf.ForceSlaveHeartbeatRetry),
-					Heartbeat:   strconv.Itoa(cluster.Conf.ForceSlaveHeartbeatTime),
+					Retry:       strconv.Itoa(cluster.Conf.ForceSubordinateHeartbeatRetry),
+					Heartbeat:   strconv.Itoa(cluster.Conf.ForceSubordinateHeartbeatTime),
 					Mode:        "SLAVE_POS",
 					SSL:         cluster.Conf.ReplicationSSL,
-					Channel:     cluster.Conf.MasterConn,
+					Channel:     cluster.Conf.MainConn,
 					IsDelayed:   sl.IsDelayed,
 					Delay:       strconv.Itoa(sl.ClusterGroup.Conf.HostsDelayedTime),
-					PostgressDB: cluster.master.PostgressDB,
+					PostgressDB: cluster.main.PostgressDB,
 				}, sl.DBVersion)
 			} else {
-				logs, changeMasterErr = dbhelper.ChangeMaster(sl.Conn, dbhelper.ChangeMasterOpt{
-					Host:      cluster.master.Host,
-					Port:      cluster.master.Port,
+				logs, changeMainErr = dbhelper.ChangeMain(sl.Conn, dbhelper.ChangeMainOpt{
+					Host:      cluster.main.Host,
+					Port:      cluster.main.Port,
 					User:      cluster.rplUser,
 					Password:  cluster.rplPass,
-					Retry:     strconv.Itoa(cluster.Conf.ForceSlaveHeartbeatRetry),
-					Heartbeat: strconv.Itoa(cluster.Conf.ForceSlaveHeartbeatTime),
+					Retry:     strconv.Itoa(cluster.Conf.ForceSubordinateHeartbeatRetry),
+					Heartbeat: strconv.Itoa(cluster.Conf.ForceSubordinateHeartbeatTime),
 					Mode:      "MXS",
 					SSL:       cluster.Conf.ReplicationSSL,
 				}, sl.DBVersion)
 			}
 		}
-		cluster.LogSQL(logs, changeMasterErr, sl.URL, "MasterFailover", LvlErr, "Change master failed on slave %s, %s", sl.URL, changeMasterErr)
-		logs, err = sl.StartSlave()
-		cluster.LogSQL(logs, err, sl.URL, "MasterFailover", LvlErr, "Could not start slave on server %s, %s", sl.URL, err)
-		// now start the old master as relay is ready
+		cluster.LogSQL(logs, changeMainErr, sl.URL, "MainFailover", LvlErr, "Change main failed on subordinate %s, %s", sl.URL, changeMainErr)
+		logs, err = sl.StartSubordinate()
+		cluster.LogSQL(logs, err, sl.URL, "MainFailover", LvlErr, "Could not start subordinate on server %s, %s", sl.URL, err)
+		// now start the old main as relay is ready
 		if cluster.Conf.MxsBinlogOn && fail == false {
-			cluster.LogPrintf(LvlInfo, "Restarting old master replication relay server ready")
-			cluster.oldMaster.StartSlave()
+			cluster.LogPrintf(LvlInfo, "Restarting old main replication relay server ready")
+			cluster.oldMain.StartSubordinate()
 		}
 		if cluster.Conf.ReadOnly && cluster.Conf.MxsBinlogOn == false && !cluster.IsInIgnoredReadonly(sl) {
 			logs, err = sl.SetReadOnly()
-			cluster.LogSQL(logs, err, sl.URL, "MasterFailover", LvlErr, "Could not set slave %s as read-only, %s", sl.URL, err)
+			cluster.LogSQL(logs, err, sl.URL, "MainFailover", LvlErr, "Could not set subordinate %s as read-only, %s", sl.URL, err)
 		} else {
 			if cluster.Conf.MxsBinlogOn == false {
 				err = sl.SetReadWrite()
 				if err != nil {
-					cluster.LogPrintf(LvlErr, "Could not remove slave %s as read-only, %s", sl.URL, err)
+					cluster.LogPrintf(LvlErr, "Could not remove subordinate %s as read-only, %s", sl.URL, err)
 				}
 			}
 		}
 	}
-	// if consul or internal proxy need to adapt read only route to new slaves
+	// if consul or internal proxy need to adapt read only route to new subordinates
 	cluster.backendStateChangeProxies()
 
-	if fail == true && cluster.Conf.PrefMaster != cluster.oldMaster.URL && cluster.master.URL != cluster.Conf.PrefMaster && cluster.Conf.PrefMaster != "" {
-		prm := cluster.foundPreferedMaster(cluster.slaves)
+	if fail == true && cluster.Conf.PrefMain != cluster.oldMain.URL && cluster.main.URL != cluster.Conf.PrefMain && cluster.Conf.PrefMain != "" {
+		prm := cluster.foundPreferedMain(cluster.subordinates)
 		if prm != nil {
-			cluster.LogPrintf(LvlInfo, "Not on Preferred Master after failover")
-			cluster.MasterFailover(false)
+			cluster.LogPrintf(LvlInfo, "Not on Preferred Main after failover")
+			cluster.MainFailover(false)
 		}
 	}
 
-	cluster.LogPrintf(LvlInfo, "Master switch on %s complete", cluster.master.URL)
-	cluster.master.FailCount = 0
+	cluster.LogPrintf(LvlInfo, "Main switch on %s complete", cluster.main.URL)
+	cluster.main.FailCount = 0
 	if fail == true {
 		cluster.FailoverCtr++
 		cluster.FailoverTs = time.Now().Unix()
@@ -655,7 +655,7 @@ func (cluster *Cluster) MasterFailover(fail bool) bool {
 	return true
 }
 
-// Returns a candidate from a list of slaves. If there's only one slave it will be the de facto candidate.
+// Returns a candidate from a list of subordinates. If there's only one subordinate it will be the de facto candidate.
 func (cluster *Cluster) electSwitchoverCandidate(l []*ServerMonitor, forcingLog bool) int {
 	ll := len(l)
 	seqList := make([]uint64, ll)
@@ -677,42 +677,42 @@ func (cluster *Cluster) electSwitchoverCandidate(l []*ServerMonitor, forcingLog 
 			cluster.sme.AddState("ERR00036", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["ERR00036"], sl.URL), ServerUrl: sl.URL, ErrFrom: "CHECK"})
 			continue
 		}
-		if cluster.Conf.MultiMaster == true && sl.State == stateMaster {
+		if cluster.Conf.MultiMain == true && sl.State == stateMain {
 			cluster.sme.AddState("ERR00035", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["ERR00035"], sl.URL), ServerUrl: sl.URL, ErrFrom: "CHECK"})
 			continue
 		}
 
-		// The tests below should run only in case of a switchover as they require the master to be up.
+		// The tests below should run only in case of a switchover as they require the main to be up.
 
-		if cluster.isSlaveElectableForSwitchover(sl, forcingLog) == false {
+		if cluster.isSubordinateElectableForSwitchover(sl, forcingLog) == false {
 			cluster.sme.AddState("ERR00034", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["ERR00034"], sl.URL), ServerUrl: sl.URL, ErrFrom: "CHECK"})
 			continue
 		}
 		/* binlog + ping  */
-		if cluster.isSlaveElectable(sl, forcingLog) == false {
+		if cluster.isSubordinateElectable(sl, forcingLog) == false {
 			cluster.sme.AddState("ERR00039", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["ERR00039"], sl.URL), ServerUrl: sl.URL, ErrFrom: "CHECK"})
 			continue
 		}
 
-		/* Rig the election if the examined slave is preferred candidate master in switchover */
-		if sl.URL == cluster.Conf.PrefMaster {
+		/* Rig the election if the examined subordinate is preferred candidate main in switchover */
+		if sl.URL == cluster.Conf.PrefMain {
 			if (cluster.Conf.LogLevel > 1 || forcingLog) && cluster.IsInFailover() {
-				cluster.LogPrintf(LvlDbg, "Election rig: %s elected as preferred master", sl.URL)
+				cluster.LogPrintf(LvlDbg, "Election rig: %s elected as preferred main", sl.URL)
 			}
 			return i
 		}
-		ss, errss := sl.GetSlaveStatus(sl.ReplicationSourceName)
-		// not a slave
+		ss, errss := sl.GetSubordinateStatus(sl.ReplicationSourceName)
+		// not a subordinate
 		if errss != nil && cluster.Conf.FailRestartUnsafe == false {
 			cluster.sme.AddState("ERR00033", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["ERR00033"], sl.URL), ServerUrl: sl.URL, ErrFrom: "CHECK"})
 			continue
 		}
-		// Fake position if none as new slave
+		// Fake position if none as new subordinate
 		filepos := "1"
-		logfile := "master.000001"
+		logfile := "main.000001"
 		if errss == nil {
-			filepos = ss.ReadMasterLogPos.String
-			logfile = ss.MasterLogFile.String
+			filepos = ss.ReadMainLogPos.String
+			logfile = ss.MainLogFile.String
 		}
 		if strings.Contains(logfile, ".") == false {
 			continue
@@ -729,8 +729,8 @@ func (cluster *Cluster) electSwitchoverCandidate(l []*ServerMonitor, forcingLog 
 		seqnos := gtid.NewList("1-1-1").GetSeqNos()
 
 		if errss == nil {
-			if cluster.master.State != stateFailed {
-				seqnos = sl.SlaveGtid.GetSeqNos()
+			if cluster.main.State != stateFailed {
+				seqnos = sl.SubordinateGtid.GetSeqNos()
 			} else {
 				seqnos = gtid.NewList(ss.GtidIOPos.String).GetSeqNos()
 			}
@@ -748,13 +748,13 @@ func (cluster *Cluster) electSwitchoverCandidate(l []*ServerMonitor, forcingLog 
 			hipos = i
 		}
 
-	} //end loop all slaves
+	} //end loop all subordinates
 	if max > 0 {
-		/* Return key of slave with the highest seqno. */
+		/* Return key of subordinate with the highest seqno. */
 		return hiseq
 	}
 	if maxpos > 0 {
-		/* Return key of slave with the highest pos. */
+		/* Return key of subordinate with the highest pos. */
 		return hipos
 	}
 	return -1
@@ -776,7 +776,7 @@ func (cluster *Cluster) electFailoverCandidate(l []*ServerMonitor, forcingLog bo
 		Prefered           bool
 		Ignoredconf        bool
 		Ignoredrelay       bool
-		Ignoredmultimaster bool
+		Ignoredmultimain bool
 		Ignoredreplication bool
 		Weight             uint
 	}
@@ -793,13 +793,13 @@ func (cluster *Cluster) electFailoverCandidate(l []*ServerMonitor, forcingLog bo
 			cluster.sme.AddState("ERR00036", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["ERR00036"], sl.URL), ErrFrom: "CHECK", ServerUrl: sl.URL})
 			continue
 		}
-		if cluster.Conf.MultiMaster == true && sl.State == stateMaster {
+		if cluster.Conf.MultiMain == true && sl.State == stateMain {
 			cluster.sme.AddState("ERR00035", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["ERR00035"], sl.URL), ErrFrom: "CHECK", ServerUrl: sl.URL})
-			trackposList[i].Ignoredmultimaster = true
+			trackposList[i].Ignoredmultimain = true
 			continue
 		}
-		if cluster.GetTopology() == topoMultiMasterWsrep && cluster.vmaster != nil {
-			if cluster.vmaster.URL == sl.URL {
+		if cluster.GetTopology() == topoMultiMainWsrep && cluster.vmain != nil {
+			if cluster.vmain.URL == sl.URL {
 
 				continue
 			} else if sl.State == stateWsrep {
@@ -809,20 +809,20 @@ func (cluster *Cluster) electFailoverCandidate(l []*ServerMonitor, forcingLog bo
 			}
 		}
 
-		ss, errss := sl.GetSlaveStatus(sl.ReplicationSourceName)
-		// not a slave
+		ss, errss := sl.GetSubordinateStatus(sl.ReplicationSourceName)
+		// not a subordinate
 		if errss != nil && cluster.Conf.FailRestartUnsafe == false {
 			cluster.sme.AddState("ERR00033", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["ERR00033"], sl.URL), ErrFrom: "CHECK", ServerUrl: sl.URL})
 			trackposList[i].Ignoredreplication = true
 			continue
 		}
-		trackposList[i].Ignoredreplication = !cluster.isSlaveElectable(sl, false)
-		// Fake position if none as new slave
+		trackposList[i].Ignoredreplication = !cluster.isSubordinateElectable(sl, false)
+		// Fake position if none as new subordinate
 		filepos := "1"
-		logfile := "master.000001"
+		logfile := "main.000001"
 		if errss == nil {
-			filepos = ss.ReadMasterLogPos.String
-			logfile = ss.MasterLogFile.String
+			filepos = ss.ReadMainLogPos.String
+			logfile = ss.MainLogFile.String
 		}
 		if strings.Contains(logfile, ".") == false {
 			continue
@@ -840,9 +840,9 @@ func (cluster *Cluster) electFailoverCandidate(l []*ServerMonitor, forcingLog bo
 		seqnos := gtid.NewList("1-1-1").GetSeqNos()
 
 		if errss == nil {
-			if cluster.master.State != stateFailed {
+			if cluster.main.State != stateFailed {
 				// Need MySQL GTID support
-				seqnos = sl.SlaveGtid.GetSeqNos()
+				seqnos = sl.SubordinateGtid.GetSeqNos()
 			} else {
 				seqnos = gtid.NewList(ss.GtidIOPos.String).GetSeqNos()
 			}
@@ -861,7 +861,7 @@ func (cluster *Cluster) electFailoverCandidate(l []*ServerMonitor, forcingLog bo
 
 		}
 
-	} //end loop all slaves
+	} //end loop all subordinates
 	sort.Slice(trackposList[:], func(i, j int) bool {
 		return trackposList[i].Seq > trackposList[j].Seq
 	})
@@ -872,23 +872,23 @@ func (cluster *Cluster) electFailoverCandidate(l []*ServerMonitor, forcingLog bo
 	}
 
 	if maxseq > 0 {
-		/* Return key of slave with the highest seqno. */
+		/* Return key of subordinate with the highest seqno. */
 
 		//send the prefered if equal max
 		for _, p := range trackposList {
-			if p.Seq == maxseq && p.Ignoredrelay == false && p.Ignoredmultimaster == false && p.Ignoredreplication == false && p.Ignoredconf == false && p.Prefered == true {
+			if p.Seq == maxseq && p.Ignoredrelay == false && p.Ignoredmultimain == false && p.Ignoredreplication == false && p.Ignoredconf == false && p.Prefered == true {
 				return p.Indice
 			}
 		}
 		//send one with maxseq
 		for _, p := range trackposList {
-			if p.Seq == maxseq && p.Ignoredrelay == false && p.Ignoredmultimaster == false && p.Ignoredreplication == false && p.Ignoredconf == false {
+			if p.Seq == maxseq && p.Ignoredrelay == false && p.Ignoredmultimain == false && p.Ignoredreplication == false && p.Ignoredconf == false {
 				return p.Indice
 			}
 		}
 		//send one with maxseq but also ignored
 		for _, p := range trackposList {
-			if p.Seq == maxseq && p.Ignoredrelay == false && p.Ignoredmultimaster == false && p.Ignoredreplication == false && p.Ignoredconf == true {
+			if p.Seq == maxseq && p.Ignoredrelay == false && p.Ignoredmultimain == false && p.Ignoredreplication == false && p.Ignoredconf == true {
 				if forcingLog {
 					cluster.LogPrintf(LvlInfo, "Ignored server is the most up to date ")
 				}
@@ -907,21 +907,21 @@ func (cluster *Cluster) electFailoverCandidate(l []*ServerMonitor, forcingLog bo
 		return trackposList[i].Pos > trackposList[j].Pos
 	})
 	if maxpos > 0 {
-		/* Return key of slave with the highest pos. */
+		/* Return key of subordinate with the highest pos. */
 		for _, p := range trackposList {
-			if p.Pos == maxpos && p.Ignoredrelay == false && p.Ignoredmultimaster == false && p.Ignoredreplication == false && p.Ignoredconf == false && p.Prefered == true {
+			if p.Pos == maxpos && p.Ignoredrelay == false && p.Ignoredmultimain == false && p.Ignoredreplication == false && p.Ignoredconf == false && p.Prefered == true {
 				return p.Indice
 			}
 		}
 		//send one with maxpos
 		for _, p := range trackposList {
-			if p.Pos == maxpos && p.Ignoredrelay == false && p.Ignoredmultimaster == false && p.Ignoredreplication == false && p.Ignoredconf == false {
+			if p.Pos == maxpos && p.Ignoredrelay == false && p.Ignoredmultimain == false && p.Ignoredreplication == false && p.Ignoredconf == false {
 				return p.Indice
 			}
 		}
 		//send one with maxpos and ignored
 		for _, p := range trackposList {
-			if p.Pos == maxpos && p.Ignoredrelay == false && p.Ignoredmultimaster == false && p.Ignoredreplication == false && p.Ignoredconf == true {
+			if p.Pos == maxpos && p.Ignoredrelay == false && p.Ignoredmultimain == false && p.Ignoredreplication == false && p.Ignoredconf == true {
 				if forcingLog {
 					cluster.LogPrintf(LvlInfo, "Ignored server is the most up to date ")
 				}
@@ -941,223 +941,223 @@ func (cluster *Cluster) electFailoverCandidate(l []*ServerMonitor, forcingLog bo
 	return -1
 }
 
-func (cluster *Cluster) isSlaveElectable(sl *ServerMonitor, forcingLog bool) bool {
-	ss, err := sl.GetSlaveStatus(sl.ReplicationSourceName)
+func (cluster *Cluster) isSubordinateElectable(sl *ServerMonitor, forcingLog bool) bool {
+	ss, err := sl.GetSubordinateStatus(sl.ReplicationSourceName)
 	if err != nil {
-		cluster.LogPrintf(LvlWarn, "Error in getting slave status in testing slave electable %s: %s  ", sl.URL, err)
+		cluster.LogPrintf(LvlWarn, "Error in getting subordinate status in testing subordinate electable %s: %s  ", sl.URL, err)
 		return false
 	}
 	/* binlog + ping  */
-	if dbhelper.CheckSlavePrerequisites(sl.Conn, sl.Host, sl.DBVersion) == false {
+	if dbhelper.CheckSubordinatePrerequisites(sl.Conn, sl.Host, sl.DBVersion) == false {
 		cluster.sme.AddState("ERR00040", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["ERR00040"], sl.URL), ErrFrom: "CHECK", ServerUrl: sl.URL})
 		if cluster.Conf.LogLevel > 1 || forcingLog {
-			cluster.LogPrintf(LvlWarn, "Slave %s does not ping or has no binlogs. Skipping", sl.URL)
+			cluster.LogPrintf(LvlWarn, "Subordinate %s does not ping or has no binlogs. Skipping", sl.URL)
 		}
 		return false
 	}
 	if sl.IsMaintenance {
 		cluster.sme.AddState("ERR00047", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["ERR00047"], sl.URL), ErrFrom: "CHECK", ServerUrl: sl.URL})
 		if cluster.Conf.LogLevel > 1 || forcingLog {
-			cluster.LogPrintf(LvlWarn, "Slave %s is in maintenance. Skipping", sl.URL)
+			cluster.LogPrintf(LvlWarn, "Subordinate %s is in maintenance. Skipping", sl.URL)
 		}
 		return false
 	}
 
-	if ss.SecondsBehindMaster.Int64 > cluster.Conf.FailMaxDelay && cluster.Conf.FailMaxDelay != -1 && cluster.Conf.RplChecks == true {
-		cluster.sme.AddState("ERR00041", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["ERR00041"], sl.URL, cluster.Conf.FailMaxDelay, ss.SecondsBehindMaster.Int64), ErrFrom: "CHECK", ServerUrl: sl.URL})
+	if ss.SecondsBehindMain.Int64 > cluster.Conf.FailMaxDelay && cluster.Conf.FailMaxDelay != -1 && cluster.Conf.RplChecks == true {
+		cluster.sme.AddState("ERR00041", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["ERR00041"], sl.URL, cluster.Conf.FailMaxDelay, ss.SecondsBehindMain.Int64), ErrFrom: "CHECK", ServerUrl: sl.URL})
 		if cluster.Conf.LogLevel > 1 || forcingLog {
-			cluster.LogPrintf(LvlWarn, "Unsafe failover condition. Slave %s has more than failover-max-delay %d seconds with replication delay %d. Skipping", sl.URL, cluster.Conf.FailMaxDelay, ss.SecondsBehindMaster.Int64)
+			cluster.LogPrintf(LvlWarn, "Unsafe failover condition. Subordinate %s has more than failover-max-delay %d seconds with replication delay %d. Skipping", sl.URL, cluster.Conf.FailMaxDelay, ss.SecondsBehindMain.Int64)
 		}
 		return false
 	}
-	if ss.SlaveSQLRunning.String == "No" && cluster.Conf.RplChecks {
+	if ss.SubordinateSQLRunning.String == "No" && cluster.Conf.RplChecks {
 		cluster.sme.AddState("ERR00042", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["ERR00042"], sl.URL), ErrFrom: "CHECK", ServerUrl: sl.URL})
 		if cluster.Conf.LogLevel > 1 || forcingLog {
-			cluster.LogPrintf(LvlWarn, "Unsafe failover condition. Slave %s SQL Thread is stopped. Skipping", sl.URL)
+			cluster.LogPrintf(LvlWarn, "Unsafe failover condition. Subordinate %s SQL Thread is stopped. Skipping", sl.URL)
 		}
 		return false
 	}
-	if sl.HaveSemiSync && sl.SemiSyncSlaveStatus == false && cluster.Conf.FailSync && cluster.Conf.RplChecks {
+	if sl.HaveSemiSync && sl.SemiSyncSubordinateStatus == false && cluster.Conf.FailSync && cluster.Conf.RplChecks {
 		cluster.sme.AddState("ERR00043", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["ERR00043"], sl.URL), ErrFrom: "CHECK", ServerUrl: sl.URL})
 		if cluster.Conf.LogLevel > 1 || forcingLog {
-			cluster.LogPrintf(LvlWarn, "Semi-sync slave %s is out of sync. Skipping", sl.URL)
+			cluster.LogPrintf(LvlWarn, "Semi-sync subordinate %s is out of sync. Skipping", sl.URL)
 		}
 		return false
 	}
 	if sl.IsIgnored() {
 		if cluster.Conf.LogLevel > 1 || forcingLog {
-			cluster.LogPrintf(LvlWarn, "Slave is in ignored list %s", sl.URL)
+			cluster.LogPrintf(LvlWarn, "Subordinate is in ignored list %s", sl.URL)
 		}
 		return false
 	}
 	return true
 }
 
-func (cluster *Cluster) foundPreferedMaster(l []*ServerMonitor) *ServerMonitor {
+func (cluster *Cluster) foundPreferedMain(l []*ServerMonitor) *ServerMonitor {
 	for _, sl := range l {
-		if strings.Contains(cluster.Conf.PrefMaster, sl.URL) && cluster.master.State != stateFailed {
+		if strings.Contains(cluster.Conf.PrefMain, sl.URL) && cluster.main.State != stateFailed {
 			return sl
 		}
 	}
 	return nil
 }
 
-func (cluster *Cluster) VMasterFailover(fail bool) bool {
+func (cluster *Cluster) VMainFailover(fail bool) bool {
 
 	cluster.sme.SetFailoverState()
 	// Phase 1: Cleanup and election
 	var err error
-	cluster.oldMaster = cluster.vmaster
+	cluster.oldMain = cluster.vmain
 	if fail == false {
 		cluster.LogPrintf(LvlInfo, "----------------------------------")
-		cluster.LogPrintf(LvlInfo, "Starting virtual master switchover")
+		cluster.LogPrintf(LvlInfo, "Starting virtual main switchover")
 		cluster.LogPrintf(LvlInfo, "----------------------------------")
-		cluster.LogPrintf(LvlInfo, "Checking long running updates on virtual master %d", cluster.Conf.SwitchWaitWrite)
-		if cluster.vmaster == nil {
-			cluster.LogPrintf(LvlErr, "Cannot switchover without a virtual master")
+		cluster.LogPrintf(LvlInfo, "Checking long running updates on virtual main %d", cluster.Conf.SwitchWaitWrite)
+		if cluster.vmain == nil {
+			cluster.LogPrintf(LvlErr, "Cannot switchover without a virtual main")
 			return false
 		}
-		if cluster.vmaster.Conn == nil {
-			cluster.LogPrintf(LvlErr, "Cannot switchover without a vmaster connection")
+		if cluster.vmain.Conn == nil {
+			cluster.LogPrintf(LvlErr, "Cannot switchover without a vmain connection")
 			return false
 		}
-		qt, logs, err := dbhelper.CheckLongRunningWrites(cluster.vmaster.Conn, cluster.Conf.SwitchWaitWrite)
-		cluster.LogSQL(logs, err, cluster.vmaster.URL, "MasterFailover", LvlDbg, "CheckLongRunningWrites")
+		qt, logs, err := dbhelper.CheckLongRunningWrites(cluster.vmain.Conn, cluster.Conf.SwitchWaitWrite)
+		cluster.LogSQL(logs, err, cluster.vmain.URL, "MainFailover", LvlDbg, "CheckLongRunningWrites")
 		if qt > 0 {
-			cluster.LogPrintf(LvlErr, "Long updates running on virtual master. Cannot switchover")
+			cluster.LogPrintf(LvlErr, "Long updates running on virtual main. Cannot switchover")
 			cluster.sme.RemoveFailoverState()
 			return false
 		}
 
-		cluster.LogPrintf(LvlInfo, "Flushing tables on virtual master %s", cluster.vmaster.URL)
+		cluster.LogPrintf(LvlInfo, "Flushing tables on virtual main %s", cluster.vmain.URL)
 		workerFlushTable := make(chan error, 1)
 
 		go func() {
 			var err2 error
-			logs, err2 = dbhelper.FlushTablesNoLog(cluster.vmaster.Conn)
-			cluster.LogSQL(logs, err, cluster.vmaster.URL, "MasterFailover", LvlDbg, "FlushTablesNoLog")
+			logs, err2 = dbhelper.FlushTablesNoLog(cluster.vmain.Conn)
+			cluster.LogSQL(logs, err, cluster.vmain.URL, "MainFailover", LvlDbg, "FlushTablesNoLog")
 
 			workerFlushTable <- err2
 		}()
 		select {
 		case err = <-workerFlushTable:
 			if err != nil {
-				cluster.LogPrintf(LvlWarn, "Could not flush tables on master", err)
+				cluster.LogPrintf(LvlWarn, "Could not flush tables on main", err)
 			}
 		case <-time.After(time.Second * time.Duration(cluster.Conf.SwitchWaitTrx)):
-			cluster.LogPrintf(LvlErr, "Long running trx on master at least %d, can not switchover ", cluster.Conf.SwitchWaitTrx)
+			cluster.LogPrintf(LvlErr, "Long running trx on main at least %d, can not switchover ", cluster.Conf.SwitchWaitTrx)
 			cluster.sme.RemoveFailoverState()
 			return false
 		}
-		cluster.master = cluster.vmaster
+		cluster.main = cluster.vmain
 	} else {
 		cluster.LogPrintf(LvlInfo, "-------------------------------")
-		cluster.LogPrintf(LvlInfo, "Starting virtual master failover")
+		cluster.LogPrintf(LvlInfo, "Starting virtual main failover")
 		cluster.LogPrintf(LvlInfo, "-------------------------------")
-		cluster.oldMaster = cluster.master
+		cluster.oldMain = cluster.main
 	}
-	cluster.LogPrintf(LvlInfo, "Electing a new virtual master")
-	for _, s := range cluster.slaves {
+	cluster.LogPrintf(LvlInfo, "Electing a new virtual main")
+	for _, s := range cluster.subordinates {
 		s.Refresh()
 	}
 	key := -1
-	if cluster.GetTopology() != topoMultiMasterWsrep {
-		key = cluster.electVirtualCandidate(cluster.oldMaster, true)
+	if cluster.GetTopology() != topoMultiMainWsrep {
+		key = cluster.electVirtualCandidate(cluster.oldMain, true)
 	} else {
-		key = cluster.electFailoverCandidate(cluster.slaves, true)
+		key = cluster.electFailoverCandidate(cluster.subordinates, true)
 	}
 	if key == -1 {
 		cluster.LogPrintf(LvlErr, "No candidates found")
 		cluster.sme.RemoveFailoverState()
 		return false
 	}
-	cluster.LogPrintf(LvlInfo, "Server %s has been elected as a new master", cluster.slaves[key].URL)
+	cluster.LogPrintf(LvlInfo, "Server %s has been elected as a new main", cluster.subordinates[key].URL)
 
 	// Shuffle the server list
 
 	var skey int
 	for k, server := range cluster.Servers {
-		if cluster.slaves[key].URL == server.URL {
+		if cluster.subordinates[key].URL == server.URL {
 			skey = k
 			break
 		}
 	}
-	cluster.vmaster = cluster.Servers[skey]
-	cluster.master = cluster.Servers[skey]
+	cluster.vmain = cluster.Servers[skey]
+	cluster.main = cluster.Servers[skey]
 	// Call pre-failover script
 	if cluster.Conf.PreScript != "" {
 		cluster.LogPrintf(LvlInfo, "Calling pre-failover script")
 		var out []byte
-		out, err = exec.Command(cluster.Conf.PreScript, cluster.oldMaster.Host, cluster.vmaster.Host, cluster.oldMaster.Port, cluster.vmaster.Port, cluster.oldMaster.MxsServerName, cluster.vmaster.MxsServerName).CombinedOutput()
+		out, err = exec.Command(cluster.Conf.PreScript, cluster.oldMain.Host, cluster.vmain.Host, cluster.oldMain.Port, cluster.vmain.Port, cluster.oldMain.MxsServerName, cluster.vmain.MxsServerName).CombinedOutput()
 		if err != nil {
 			cluster.LogPrintf(LvlErr, "%s", err)
 		}
 		cluster.LogPrintf(LvlInfo, "Pre-failover script complete:", string(out))
 	}
 
-	// Phase 2: Reject updates and sync slaves on switchover
+	// Phase 2: Reject updates and sync subordinates on switchover
 	if fail == false {
 		if cluster.Conf.FailEventStatus {
-			for _, v := range cluster.vmaster.EventStatus {
+			for _, v := range cluster.vmain.EventStatus {
 				if v.Status == 3 {
-					cluster.LogPrintf(LvlInfo, "Set DISABLE ON SLAVE for event %s %s on old master", v.Db, v.Name)
-					logs, err := dbhelper.SetEventStatus(cluster.oldMaster.Conn, v, 3)
-					cluster.LogSQL(logs, err, cluster.oldMaster.URL, "MasterFailover", LvlErr, "Could not Set DISABLE ON SLAVE for event %s %s on old master", v.Db, v.Name)
+					cluster.LogPrintf(LvlInfo, "Set DISABLE ON SLAVE for event %s %s on old main", v.Db, v.Name)
+					logs, err := dbhelper.SetEventStatus(cluster.oldMain.Conn, v, 3)
+					cluster.LogSQL(logs, err, cluster.oldMain.URL, "MainFailover", LvlErr, "Could not Set DISABLE ON SLAVE for event %s %s on old main", v.Db, v.Name)
 				}
 			}
 		}
 		if cluster.Conf.FailEventScheduler {
 
-			cluster.LogPrintf(LvlInfo, "Disable Event Scheduler on old master")
-			logs, err := dbhelper.SetEventScheduler(cluster.oldMaster.Conn, false, cluster.oldMaster.DBVersion)
-			cluster.LogSQL(logs, err, cluster.oldMaster.URL, "MasterFailover", LvlErr, "Could not disable event scheduler on old master")
+			cluster.LogPrintf(LvlInfo, "Disable Event Scheduler on old main")
+			logs, err := dbhelper.SetEventScheduler(cluster.oldMain.Conn, false, cluster.oldMain.DBVersion)
+			cluster.LogSQL(logs, err, cluster.oldMain.URL, "MainFailover", LvlErr, "Could not disable event scheduler on old main")
 		}
-		cluster.oldMaster.freeze()
-		cluster.LogPrintf(LvlInfo, "Rejecting updates on %s (old master)", cluster.oldMaster.URL)
-		logs, err := dbhelper.FlushTablesWithReadLock(cluster.oldMaster.Conn, cluster.oldMaster.DBVersion)
-		cluster.LogSQL(logs, err, cluster.oldMaster.URL, "MasterFailover", LvlErr, "Could not lock tables on %s (old master) %s", cluster.oldMaster.URL, err)
+		cluster.oldMain.freeze()
+		cluster.LogPrintf(LvlInfo, "Rejecting updates on %s (old main)", cluster.oldMain.URL)
+		logs, err := dbhelper.FlushTablesWithReadLock(cluster.oldMain.Conn, cluster.oldMain.DBVersion)
+		cluster.LogSQL(logs, err, cluster.oldMain.URL, "MainFailover", LvlErr, "Could not lock tables on %s (old main) %s", cluster.oldMain.URL, err)
 	}
 
 	// Failover
-	if cluster.GetTopology() != topoMultiMasterWsrep {
-		// Sync candidate depending on the master status.
+	if cluster.GetTopology() != topoMultiMainWsrep {
+		// Sync candidate depending on the main status.
 		// If it's a switchover, use MASTER_POS_WAIT to sync.
 		// If it's a failover, wait for the SQL thread to read all relay logs.
 		// If maxsclale we should wait for relay catch via old style
 		crash := new(Crash)
-		crash.URL = cluster.oldMaster.URL
-		crash.ElectedMasterURL = cluster.master.URL
+		crash.URL = cluster.oldMain.URL
+		crash.ElectedMainURL = cluster.main.URL
 
-		cluster.LogPrintf(LvlInfo, "Waiting for candidate master to apply relay log")
-		err = cluster.master.ReadAllRelayLogs()
+		cluster.LogPrintf(LvlInfo, "Waiting for candidate main to apply relay log")
+		err = cluster.main.ReadAllRelayLogs()
 		if err != nil {
 			cluster.LogPrintf(LvlErr, "Error while reading relay logs on candidate: %s", err)
 		}
 		cluster.LogPrintf("INFO ", "Save replication status before electing")
-		ms, err := cluster.master.GetSlaveStatus(cluster.master.ReplicationSourceName)
+		ms, err := cluster.main.GetSubordinateStatus(cluster.main.ReplicationSourceName)
 		if err != nil {
-			cluster.LogPrintf(LvlErr, "Faiover can not fetch replication info on new master: %s", err)
+			cluster.LogPrintf(LvlErr, "Faiover can not fetch replication info on new main: %s", err)
 		}
-		cluster.LogPrintf(LvlInfo, "master_log_file=%s", ms.MasterLogFile.String)
-		cluster.LogPrintf(LvlInfo, "master_log_pos=%s", ms.ReadMasterLogPos.String)
-		cluster.LogPrintf(LvlInfo, "Candidate was in sync=%t", cluster.master.SemiSyncSlaveStatus)
-		//		cluster.master.FailoverMasterLogFile = cluster.master.MasterLogFile
-		//		cluster.master.FailoverMasterLogPos = cluster.master.MasterLogPos
-		crash.FailoverMasterLogFile = ms.MasterLogFile.String
-		crash.FailoverMasterLogPos = ms.ReadMasterLogPos.String
-		if cluster.master.DBVersion.IsMariaDB() {
+		cluster.LogPrintf(LvlInfo, "main_log_file=%s", ms.MainLogFile.String)
+		cluster.LogPrintf(LvlInfo, "main_log_pos=%s", ms.ReadMainLogPos.String)
+		cluster.LogPrintf(LvlInfo, "Candidate was in sync=%t", cluster.main.SemiSyncSubordinateStatus)
+		//		cluster.main.FailoverMainLogFile = cluster.main.MainLogFile
+		//		cluster.main.FailoverMainLogPos = cluster.main.MainLogPos
+		crash.FailoverMainLogFile = ms.MainLogFile.String
+		crash.FailoverMainLogPos = ms.ReadMainLogPos.String
+		if cluster.main.DBVersion.IsMariaDB() {
 			if cluster.Conf.MxsBinlogOn {
-				//	cluster.master.FailoverIOGtid = cluster.master.CurrentGtid
-				crash.FailoverIOGtid = cluster.master.CurrentGtid
+				//	cluster.main.FailoverIOGtid = cluster.main.CurrentGtid
+				crash.FailoverIOGtid = cluster.main.CurrentGtid
 			} else {
-				//	cluster.master.FailoverIOGtid = gtid.NewList(ms.GtidIOPos.String)
+				//	cluster.main.FailoverIOGtid = gtid.NewList(ms.GtidIOPos.String)
 				crash.FailoverIOGtid = gtid.NewList(ms.GtidIOPos.String)
 			}
-		} else if cluster.master.DBVersion.IsMySQLOrPerconaGreater57() && cluster.master.HasGTIDReplication() {
+		} else if cluster.main.DBVersion.IsMySQLOrPerconaGreater57() && cluster.main.HasGTIDReplication() {
 			crash.FailoverIOGtid = gtid.NewMySQLList(ms.ExecutedGtidSet.String)
 		}
-		cluster.master.FailoverSemiSyncSlaveStatus = cluster.master.SemiSyncSlaveStatus
-		crash.FailoverSemiSyncSlaveStatus = cluster.master.SemiSyncSlaveStatus
+		cluster.main.FailoverSemiSyncSubordinateStatus = cluster.main.SemiSyncSubordinateStatus
+		crash.FailoverSemiSyncSubordinateStatus = cluster.main.SemiSyncSubordinateStatus
 		cluster.Crashes = append(cluster.Crashes, crash)
 		cluster.Save()
 		t := time.Now()
@@ -1165,86 +1165,86 @@ func (cluster *Cluster) VMasterFailover(fail bool) bool {
 		crash.Purge(cluster.WorkingDir, cluster.Conf.FailoverLogFileKeep)
 	}
 
-	// Phase 3: Prepare new master
+	// Phase 3: Prepare new main
 
-	// Call post-failover script before unlocking the old master.
+	// Call post-failover script before unlocking the old main.
 	if cluster.Conf.PostScript != "" {
 		cluster.LogPrintf(LvlInfo, "Calling post-failover script")
 		var out []byte
-		out, err = exec.Command(cluster.Conf.PostScript, cluster.oldMaster.Host, cluster.master.Host, cluster.oldMaster.Port, cluster.master.Port, cluster.oldMaster.MxsServerName, cluster.master.MxsServerName).CombinedOutput()
+		out, err = exec.Command(cluster.Conf.PostScript, cluster.oldMain.Host, cluster.main.Host, cluster.oldMain.Port, cluster.main.Port, cluster.oldMain.MxsServerName, cluster.main.MxsServerName).CombinedOutput()
 		if err != nil {
 			cluster.LogPrintf(LvlErr, "%s", err)
 		}
 		cluster.LogPrintf(LvlInfo, "Post-failover script complete", string(out))
 	}
 	cluster.failoverProxies()
-	cluster.master.SetReadWrite()
+	cluster.main.SetReadWrite()
 
 	if err != nil {
-		cluster.LogPrintf(LvlErr, "Could not set new master as read-write")
+		cluster.LogPrintf(LvlErr, "Could not set new main as read-write")
 	}
 	if cluster.Conf.FailEventScheduler {
-		cluster.LogPrintf(LvlInfo, "Enable Event Scheduler on the new master")
-		logs, err := dbhelper.SetEventScheduler(cluster.vmaster.Conn, true, cluster.vmaster.DBVersion)
-		cluster.LogSQL(logs, err, cluster.vmaster.URL, "MasterFailover", LvlErr, "Could not enable event scheduler on the new master")
+		cluster.LogPrintf(LvlInfo, "Enable Event Scheduler on the new main")
+		logs, err := dbhelper.SetEventScheduler(cluster.vmain.Conn, true, cluster.vmain.DBVersion)
+		cluster.LogSQL(logs, err, cluster.vmain.URL, "MainFailover", LvlErr, "Could not enable event scheduler on the new main")
 	}
 	if cluster.Conf.FailEventStatus {
-		for _, v := range cluster.master.EventStatus {
+		for _, v := range cluster.main.EventStatus {
 			if v.Status == 3 {
-				cluster.LogPrintf(LvlInfo, "Set ENABLE for event %s %s on new master", v.Db, v.Name)
-				logs, err := dbhelper.SetEventStatus(cluster.vmaster.Conn, v, 1)
-				cluster.LogSQL(logs, err, cluster.vmaster.URL, "MasterFailover", LvlErr, "Could not Set ENABLE for event %s %s on new master", v.Db, v.Name)
+				cluster.LogPrintf(LvlInfo, "Set ENABLE for event %s %s on new main", v.Db, v.Name)
+				logs, err := dbhelper.SetEventStatus(cluster.vmain.Conn, v, 1)
+				cluster.LogSQL(logs, err, cluster.vmain.URL, "MainFailover", LvlErr, "Could not Set ENABLE for event %s %s on new main", v.Db, v.Name)
 			}
 		}
 	}
 
 	if fail == false {
 		// Get latest GTID pos
-		cluster.oldMaster.Refresh()
+		cluster.oldMain.Refresh()
 
 		// ********
-		// Phase 4: Demote old master to slave
+		// Phase 4: Demote old main to subordinate
 		// ********
-		cluster.LogPrintf(LvlInfo, "Switching old master as a slave")
-		logs, err := dbhelper.UnlockTables(cluster.oldMaster.Conn)
-		cluster.LogSQL(logs, err, cluster.oldMaster.URL, "MasterFailover", LvlErr, "Could not unlock tables on old master %s", err)
+		cluster.LogPrintf(LvlInfo, "Switching old main as a subordinate")
+		logs, err := dbhelper.UnlockTables(cluster.oldMain.Conn)
+		cluster.LogSQL(logs, err, cluster.oldMain.URL, "MainFailover", LvlErr, "Could not unlock tables on old main %s", err)
 
 		if cluster.Conf.ReadOnly {
 
-			logs, err = cluster.oldMaster.SetReadOnly()
-			cluster.LogSQL(logs, err, cluster.oldMaster.URL, "MasterFailover", LvlErr, "Could not set old master as read-only, %s", err)
+			logs, err = cluster.oldMain.SetReadOnly()
+			cluster.LogSQL(logs, err, cluster.oldMain.URL, "MainFailover", LvlErr, "Could not set old main as read-only, %s", err)
 
 		} else {
-			err = cluster.oldMaster.SetReadWrite()
+			err = cluster.oldMain.SetReadWrite()
 			if err != nil {
-				cluster.LogPrintf(LvlErr, "Could not set old master as read-write, %s", err)
+				cluster.LogPrintf(LvlErr, "Could not set old main as read-write, %s", err)
 			}
 		}
 		if cluster.Conf.SwitchDecreaseMaxConn {
-			logs, err := dbhelper.SetMaxConnections(cluster.oldMaster.Conn, cluster.oldMaster.maxConn, cluster.oldMaster.DBVersion)
-			cluster.LogSQL(logs, err, cluster.oldMaster.URL, "MasterFailover", LvlErr, "Could not set max connections on %s %s", cluster.oldMaster.URL, err)
+			logs, err := dbhelper.SetMaxConnections(cluster.oldMain.Conn, cluster.oldMain.maxConn, cluster.oldMain.DBVersion)
+			cluster.LogSQL(logs, err, cluster.oldMain.URL, "MainFailover", LvlErr, "Could not set max connections on %s %s", cluster.oldMain.URL, err)
 		}
-		// Add the old master to the slaves list
+		// Add the old main to the subordinates list
 	}
-	if cluster.GetTopology() == topoMultiMasterRing {
+	if cluster.GetTopology() == topoMultiMainRing {
 		// ********
 		// Phase 5: Closing loop
 		// ********
-		cluster.CloseRing(cluster.oldMaster)
+		cluster.CloseRing(cluster.oldMain)
 	}
-	cluster.LogPrintf(LvlInfo, "Virtual Master switch on %s complete", cluster.vmaster.URL)
-	cluster.vmaster.FailCount = 0
+	cluster.LogPrintf(LvlInfo, "Virtual Main switch on %s complete", cluster.vmain.URL)
+	cluster.vmain.FailCount = 0
 	if fail == true {
 		cluster.FailoverCtr++
 		cluster.FailoverTs = time.Now().Unix()
 	}
-	cluster.master = nil
+	cluster.main = nil
 
 	cluster.sme.RemoveFailoverState()
 	return true
 }
 
-func (cluster *Cluster) electVirtualCandidate(oldMaster *ServerMonitor, forcingLog bool) int {
+func (cluster *Cluster) electVirtualCandidate(oldMain *ServerMonitor, forcingLog bool) int {
 
 	for i, sl := range cluster.Servers {
 		/* If server is in the ignore list, do not elect it */
@@ -1255,7 +1255,7 @@ func (cluster *Cluster) electVirtualCandidate(oldMaster *ServerMonitor, forcingL
 			}
 			continue
 		}
-		if sl.State != stateFailed && sl.ServerID != oldMaster.ServerID {
+		if sl.State != stateFailed && sl.ServerID != oldMain.ServerID {
 			return i
 		}
 
@@ -1263,12 +1263,12 @@ func (cluster *Cluster) electVirtualCandidate(oldMaster *ServerMonitor, forcingL
 	return -1
 }
 
-func (cluster *Cluster) GetRingChildServer(oldMaster *ServerMonitor) *ServerMonitor {
+func (cluster *Cluster) GetRingChildServer(oldMain *ServerMonitor) *ServerMonitor {
 	for _, s := range cluster.Servers {
-		if s.ServerID != cluster.oldMaster.ServerID {
-			//cluster.LogPrintf(LvlDbg, "test %s failed %s", s.URL, cluster.oldMaster.URL)
-			master, err := cluster.GetMasterFromReplication(s)
-			if err == nil && master.ServerID == oldMaster.ServerID {
+		if s.ServerID != cluster.oldMain.ServerID {
+			//cluster.LogPrintf(LvlDbg, "test %s failed %s", s.URL, cluster.oldMain.URL)
+			main, err := cluster.GetMainFromReplication(s)
+			if err == nil && main.ServerID == oldMain.ServerID {
 				return s
 			}
 		}
@@ -1276,68 +1276,68 @@ func (cluster *Cluster) GetRingChildServer(oldMaster *ServerMonitor) *ServerMoni
 	return nil
 }
 
-func (cluster *Cluster) GetRingParentServer(oldMaster *ServerMonitor) *ServerMonitor {
-	ss, err := cluster.oldMaster.GetSlaveStatusLastSeen(cluster.oldMaster.ReplicationSourceName)
+func (cluster *Cluster) GetRingParentServer(oldMain *ServerMonitor) *ServerMonitor {
+	ss, err := cluster.oldMain.GetSubordinateStatusLastSeen(cluster.oldMain.ReplicationSourceName)
 	if err != nil {
 		return nil
 	}
-	return cluster.GetServerFromURL(ss.MasterHost.String + ":" + ss.MasterPort.String)
+	return cluster.GetServerFromURL(ss.MainHost.String + ":" + ss.MainPort.String)
 }
 
-func (cluster *Cluster) CloseRing(oldMaster *ServerMonitor) error {
-	cluster.LogPrintf(LvlInfo, "Closing ring around %s", cluster.oldMaster.URL)
-	child := cluster.GetRingChildServer(cluster.oldMaster)
+func (cluster *Cluster) CloseRing(oldMain *ServerMonitor) error {
+	cluster.LogPrintf(LvlInfo, "Closing ring around %s", cluster.oldMain.URL)
+	child := cluster.GetRingChildServer(cluster.oldMain)
 	if child == nil {
 		return errors.New("Can't find child in ring")
 	}
 	cluster.LogPrintf(LvlInfo, "Child is %s", child.URL)
-	parent := cluster.GetRingParentServer(oldMaster)
+	parent := cluster.GetRingParentServer(oldMain)
 	if parent == nil {
 		return errors.New("Can't find parent in ring")
 	}
 	cluster.LogPrintf(LvlInfo, "Parent is %s", parent.URL)
-	logs, err := child.StopSlave()
-	cluster.LogSQL(logs, err, child.URL, "MasterFailover", LvlErr, "Could not stop slave on server %s, %s", child.URL, err)
+	logs, err := child.StopSubordinate()
+	cluster.LogSQL(logs, err, child.URL, "MainFailover", LvlErr, "Could not stop subordinate on server %s, %s", child.URL, err)
 
 	hasMyGTID := parent.HasMySQLGTID()
 
-	var changeMasterErr error
+	var changeMainErr error
 
 	// Not MariaDB and not using MySQL GTID, 2.0 stop doing any thing until pseudo GTID
 	if parent.DBVersion.IsMySQLOrPerconaGreater57() && hasMyGTID == true {
-		logs, changeMasterErr = dbhelper.ChangeMaster(child.Conn, dbhelper.ChangeMasterOpt{
+		logs, changeMainErr = dbhelper.ChangeMain(child.Conn, dbhelper.ChangeMainOpt{
 			Host:        parent.Host,
 			Port:        parent.Port,
 			User:        cluster.rplUser,
 			Password:    cluster.rplPass,
-			Retry:       strconv.Itoa(cluster.Conf.ForceSlaveHeartbeatRetry),
-			Heartbeat:   strconv.Itoa(cluster.Conf.ForceSlaveHeartbeatTime),
+			Retry:       strconv.Itoa(cluster.Conf.ForceSubordinateHeartbeatRetry),
+			Heartbeat:   strconv.Itoa(cluster.Conf.ForceSubordinateHeartbeatTime),
 			Mode:        "",
 			SSL:         cluster.Conf.ReplicationSSL,
-			Channel:     cluster.Conf.MasterConn,
+			Channel:     cluster.Conf.MainConn,
 			PostgressDB: parent.PostgressDB,
 		}, child.DBVersion)
 	} else {
 		//MariaDB all cases use GTID
 
-		logs, changeMasterErr = dbhelper.ChangeMaster(child.Conn, dbhelper.ChangeMasterOpt{
+		logs, changeMainErr = dbhelper.ChangeMain(child.Conn, dbhelper.ChangeMainOpt{
 			Host:        parent.Host,
 			Port:        parent.Port,
 			User:        cluster.rplUser,
 			Password:    cluster.rplPass,
-			Retry:       strconv.Itoa(cluster.Conf.ForceSlaveHeartbeatRetry),
-			Heartbeat:   strconv.Itoa(cluster.Conf.ForceSlaveHeartbeatTime),
+			Retry:       strconv.Itoa(cluster.Conf.ForceSubordinateHeartbeatRetry),
+			Heartbeat:   strconv.Itoa(cluster.Conf.ForceSubordinateHeartbeatTime),
 			Mode:        "SLAVE_POS",
 			SSL:         cluster.Conf.ReplicationSSL,
-			Channel:     cluster.Conf.MasterConn,
+			Channel:     cluster.Conf.MainConn,
 			PostgressDB: parent.PostgressDB,
 		}, child.DBVersion)
 	}
 
-	cluster.LogSQL(logs, changeMasterErr, child.URL, "MasterFailover", LvlErr, "Could not change masteron server %s, %s", child.URL, changeMasterErr)
+	cluster.LogSQL(logs, changeMainErr, child.URL, "MainFailover", LvlErr, "Could not change mainon server %s, %s", child.URL, changeMainErr)
 
-	logs, err = child.StartSlave()
-	cluster.LogSQL(logs, err, child.URL, "MasterFailover", LvlErr, "Could not start slave on server %s, %s", child.URL, err)
+	logs, err = child.StartSubordinate()
+	cluster.LogSQL(logs, err, child.URL, "MainFailover", LvlErr, "Could not start subordinate on server %s, %s", child.URL, err)
 
 	return nil
 }

@@ -56,7 +56,7 @@ type ServerMonitor struct {
 	ServerID                    uint64                       `json:"serverId"`
 	GTIDBinlogPos               *gtid.List                   `json:"gtidBinlogPos"`
 	CurrentGtid                 *gtid.List                   `json:"currentGtid"`
-	SlaveGtid                   *gtid.List                   `json:"slaveGtid"`
+	SubordinateGtid                   *gtid.List                   `json:"subordinateGtid"`
 	IOGtid                      *gtid.List                   `json:"ioGtid"`
 	FailoverIOGtid              *gtid.List                   `json:"failoverIoGtid"`
 	GTIDExecuted                string                       `json:"gtidExecuted"`
@@ -69,13 +69,13 @@ type ServerMonitor struct {
 	BinaryLogFile               string                       `json:"binaryLogFile"`
 	BinaryLogFilePrevious       string                       `json:"binaryLogFilePrevious"`
 	BinaryLogPos                string                       `json:"binaryLogPos"`
-	FailoverMasterLogFile       string                       `json:"failoverMasterLogFile"`
-	FailoverMasterLogPos        string                       `json:"failoverMasterLogPos"`
-	FailoverSemiSyncSlaveStatus bool                         `json:"failoverSemiSyncSlaveStatus"`
+	FailoverMainLogFile       string                       `json:"failoverMainLogFile"`
+	FailoverMainLogPos        string                       `json:"failoverMainLogPos"`
+	FailoverSemiSyncSubordinateStatus bool                         `json:"failoverSemiSyncSubordinateStatus"`
 	Process                     *os.Process                  `json:"process"`
-	SemiSyncMasterStatus        bool                         `json:"semiSyncMasterStatus"`
-	SemiSyncSlaveStatus         bool                         `json:"semiSyncSlaveStatus"`
-	RplMasterStatus             bool                         `json:"rplMasterStatus"`
+	SemiSyncMainStatus        bool                         `json:"semiSyncMainStatus"`
+	SemiSyncSubordinateStatus         bool                         `json:"semiSyncSubordinateStatus"`
+	RplMainStatus             bool                         `json:"rplMainStatus"`
 	HaveEventScheduler          bool                         `json:"eventScheduler"`
 	HaveSemiSync                bool                         `json:"haveSemiSync"`
 	HaveInnodbTrxCommit         bool                         `json:"haveInnodbTrxCommit"`
@@ -87,7 +87,7 @@ type ServerMonitor struct {
 	HaveBinlogAnnotate          bool                         `json:"haveBinlogAnnotate"`
 	HaveBinlogSlowqueries       bool                         `json:"haveBinlogSlowqueries"`
 	HaveBinlogCompress          bool                         `json:"haveBinlogCompress"`
-	HaveBinlogSlaveUpdates      bool                         `json:"HaveBinlogSlaveUpdates"`
+	HaveBinlogSubordinateUpdates      bool                         `json:"HaveBinlogSubordinateUpdates"`
 	HaveGtidStrictMode          bool                         `json:"haveGtidStrictMode"`
 	HaveMySQLGTID               bool                         `json:"haveMysqlGtid"`
 	HaveMariaDBGTID             bool                         `json:"haveMariadbGtid"`
@@ -105,8 +105,8 @@ type ServerMonitor struct {
 	IsWsrepPrimary              bool                         `json:"isWsrepPrimary"`
 	IsMaxscale                  bool                         `json:"isMaxscale"`
 	IsRelay                     bool                         `json:"isRelay"`
-	IsSlave                     bool                         `json:"isSlave"`
-	IsVirtualMaster             bool                         `json:"isVirtualMaster"`
+	IsSubordinate                     bool                         `json:"isSubordinate"`
+	IsVirtualMain             bool                         `json:"isVirtualMain"`
 	IsMaintenance               bool                         `json:"isMaintenance"`
 	IsCompute                   bool                         `json:"isCompute"` //Used to idenfied spider compute nide
 	IsDelayed                   bool                         `json:"isDelayed"`
@@ -126,10 +126,10 @@ type ServerMonitor struct {
 	MxsServerStatus             string                       `json:"maxscaleServerStatus"`
 	ProxysqlHostgroup           string                       `json:"proxysqlHostgroup"`
 	RelayLogSize                uint64                       `json:"relayLogSize"`
-	Replications                []dbhelper.SlaveStatus       `json:"replications"`
-	LastSeenReplications        []dbhelper.SlaveStatus       `json:"lastSeenReplications"`
-	MasterStatus                dbhelper.MasterStatus        `json:"masterStatus"`
-	SlaveStatus                 *dbhelper.SlaveStatus        `json:"-"`
+	Replications                []dbhelper.SubordinateStatus       `json:"replications"`
+	LastSeenReplications        []dbhelper.SubordinateStatus       `json:"lastSeenReplications"`
+	MainStatus                dbhelper.MainStatus        `json:"mainStatus"`
+	SubordinateStatus                 *dbhelper.SubordinateStatus        `json:"-"`
 	ReplicationSourceName       string                       `json:"replicationSourceName"`
 	DBVersion                   *dbhelper.MySQLVersion       `json:"dbVersion"`
 	Version                     int                          `json:"-"`
@@ -169,17 +169,17 @@ type serverList []*ServerMonitor
 
 const (
 	stateFailed       string = "Failed"
-	stateMaster       string = "Master"
-	stateSlave        string = "Slave"
-	stateSlaveErr     string = "SlaveErr"
-	stateSlaveLate    string = "SlaveLate"
+	stateMain       string = "Main"
+	stateSubordinate        string = "Subordinate"
+	stateSubordinateErr     string = "SubordinateErr"
+	stateSubordinateLate    string = "SubordinateLate"
 	stateMaintenance  string = "Maintenance"
 	stateUnconn       string = "StandAlone"
 	stateErrorAuth    string = "ErrorAuth"
 	stateSuspect      string = "Suspect"
 	stateShard        string = "Shard"
 	stateProv         string = "Provision"
-	stateMasterAlone  string = "MasterAlone"
+	stateMainAlone  string = "MainAlone"
 	stateRelay        string = "Relay"
 	stateRelayErr     string = "RelayErr"
 	stateRelayLate    string = "RelayLate"
@@ -228,7 +228,7 @@ func (cluster *Cluster) newServerMonitor(url string, user string, pass string, c
 	}
 
 	server.SetCredential(url, user, pass)
-	server.ReplicationSourceName = cluster.Conf.MasterConn
+	server.ReplicationSourceName = cluster.Conf.MainConn
 
 	server.HaveSemiSync = true
 	server.HaveInnodbTrxCommit = true
@@ -273,7 +273,7 @@ func (cluster *Cluster) newServerMonitor(url string, user string, pass string, c
 	server.SetIgnored(cluster.IsInIgnoredHosts(server))
 	server.SetPreferedBackup(cluster.IsInPreferedBackupHosts(server))
 	server.SetPrefered(cluster.IsInPreferedHosts(server))
-	if server.ClusterGroup.Conf.MasterSlavePgStream || server.ClusterGroup.Conf.MasterSlavePgLogical {
+	if server.ClusterGroup.Conf.MainSubordinatePgStream || server.ClusterGroup.Conf.MainSubordinatePgLogical {
 		server.Conn, err = sqlx.Open("postgres", server.DSN)
 	} else {
 		server.Conn, err = sqlx.Open("mysql", server.DSN)
@@ -285,11 +285,11 @@ func (server *ServerMonitor) Ping(wg *sync.WaitGroup) {
 
 	defer wg.Done()
 
-	if server.ClusterGroup.vmaster != nil {
-		if server.ClusterGroup.vmaster.ServerID == server.ServerID {
-			server.IsVirtualMaster = true
+	if server.ClusterGroup.vmain != nil {
+		if server.ClusterGroup.vmain.ServerID == server.ServerID {
+			server.IsVirtualMain = true
 		} else {
-			server.IsVirtualMaster = false
+			server.IsVirtualMain = false
 		}
 	}
 	var conn *sqlx.DB
@@ -329,34 +329,34 @@ func (server *ServerMonitor) Ping(wg *sync.WaitGroup) {
 		}
 		if err != sql.ErrNoRows {
 			server.FailCount++
-			if server.ClusterGroup.master == nil {
-				server.ClusterGroup.LogPrintf(LvlDbg, "Master not defined")
+			if server.ClusterGroup.main == nil {
+				server.ClusterGroup.LogPrintf(LvlDbg, "Main not defined")
 			}
-			if server.ClusterGroup.master != nil && server.URL == server.ClusterGroup.master.URL {
+			if server.ClusterGroup.main != nil && server.URL == server.ClusterGroup.main.URL {
 				server.FailSuspectHeartbeat = server.ClusterGroup.sme.GetHeartbeats()
-				if server.ClusterGroup.master.FailCount <= server.ClusterGroup.Conf.MaxFail {
-					server.ClusterGroup.LogPrintf("INFO", "Master Failure detected! Retry %d/%d", server.ClusterGroup.master.FailCount, server.ClusterGroup.Conf.MaxFail)
+				if server.ClusterGroup.main.FailCount <= server.ClusterGroup.Conf.MaxFail {
+					server.ClusterGroup.LogPrintf("INFO", "Main Failure detected! Retry %d/%d", server.ClusterGroup.main.FailCount, server.ClusterGroup.Conf.MaxFail)
 				}
 				if server.FailCount >= server.ClusterGroup.Conf.MaxFail {
 					if server.FailCount == server.ClusterGroup.Conf.MaxFail {
-						server.ClusterGroup.LogPrintf("INFO", "Declaring db master as failed %s", server.URL)
+						server.ClusterGroup.LogPrintf("INFO", "Declaring db main as failed %s", server.URL)
 					}
-					server.ClusterGroup.master.State = stateFailed
+					server.ClusterGroup.main.State = stateFailed
 					server.DelWaitStopCookie()
 				} else {
-					server.ClusterGroup.master.State = stateSuspect
+					server.ClusterGroup.main.State = stateSuspect
 
 				}
 			} else {
-				// not the master
-				server.ClusterGroup.LogPrintf(LvlDbg, "Failure detection of no master FailCount %d MaxFail %d", server.FailCount, server.ClusterGroup.Conf.MaxFail)
+				// not the main
+				server.ClusterGroup.LogPrintf(LvlDbg, "Failure detection of no main FailCount %d MaxFail %d", server.FailCount, server.ClusterGroup.Conf.MaxFail)
 				if server.FailCount >= server.ClusterGroup.Conf.MaxFail {
 					if server.FailCount == server.ClusterGroup.Conf.MaxFail {
-						server.ClusterGroup.LogPrintf("INFO", "Declaring slave db %s as failed", server.URL)
+						server.ClusterGroup.LogPrintf("INFO", "Declaring subordinate db %s as failed", server.URL)
 						server.State = stateFailed
 						server.DelWaitStopCookie()
-						// remove from slave list
-						server.delete(&server.ClusterGroup.slaves)
+						// remove from subordinate list
+						server.delete(&server.ClusterGroup.subordinates)
 						if server.Replications != nil {
 							server.LastSeenReplications = server.Replications
 						}
@@ -375,7 +375,7 @@ func (server *ServerMonitor) Ping(wg *sync.WaitGroup) {
 				server.ClusterGroup.LogPrintf("ALERT", "Server %s state changed from %s to %s", server.URL, server.PrevState, server.State)
 				server.ClusterGroup.backendStateChangeProxies()
 				server.SendAlert()
-				server.ProcessFailedSlave()
+				server.ProcessFailedSubordinate()
 			}
 		}
 		if server.PrevState != server.State {
@@ -418,9 +418,9 @@ func (server *ServerMonitor) Ping(wg *sync.WaitGroup) {
 		server.FailSuspectHeartbeat = 0
 	}
 
-	var ss dbhelper.SlaveStatus
-	ss, _, errss := dbhelper.GetSlaveStatus(server.Conn, server.ClusterGroup.Conf.MasterConn, server.DBVersion)
-	// We have no replicatieon can this be the old master
+	var ss dbhelper.SubordinateStatus
+	ss, _, errss := dbhelper.GetSubordinateStatus(server.Conn, server.ClusterGroup.Conf.MainConn, server.DBVersion)
+	// We have no replicatieon can this be the old main
 	//  1617 is no multi source channel found
 	noChannel := false
 	if errss != nil {
@@ -436,9 +436,9 @@ func (server *ServerMonitor) Ping(wg *sync.WaitGroup) {
 		if server.PrevState == stateFailed || server.PrevState == stateErrorAuth {
 			server.ClusterGroup.LogPrintf(LvlDbg, "State comparison reinitialized failed server %s as unconnected", server.URL)
 			if server.ClusterGroup.Conf.ReadOnly && server.HaveWsrep == false && server.ClusterGroup.IsDiscovered() {
-				if server.ClusterGroup.master != nil {
-					if server.ClusterGroup.Status == ConstMonitorActif && server.ClusterGroup.master.Id != server.Id && !server.ClusterGroup.IsInIgnoredReadonly(server) {
-						server.ClusterGroup.LogPrintf(LvlInfo, "Setting Read Only on unconnected server %s as active monitor and other master is discovered", server.URL)
+				if server.ClusterGroup.main != nil {
+					if server.ClusterGroup.Status == ConstMonitorActif && server.ClusterGroup.main.Id != server.Id && !server.ClusterGroup.IsInIgnoredReadonly(server) {
+						server.ClusterGroup.LogPrintf(LvlInfo, "Setting Read Only on unconnected server %s as active monitor and other main is discovered", server.URL)
 						server.SetReadOnly()
 					} else if server.ClusterGroup.Status == ConstMonitorStandby && server.ClusterGroup.Conf.Arbitration && !server.ClusterGroup.IsInIgnoredReadonly(server) {
 						server.ClusterGroup.LogPrintf(LvlInfo, "Setting Read Only on unconnected server %s as a standby monitor ", server.URL)
@@ -446,26 +446,26 @@ func (server *ServerMonitor) Ping(wg *sync.WaitGroup) {
 					}
 				}
 			}
-			//if server.ClusterGroup.GetTopology() != topoMultiMasterWsrep {
+			//if server.ClusterGroup.GetTopology() != topoMultiMainWsrep {
 			server.State = stateUnconn
 			//}
 			server.FailCount = 0
 			server.ClusterGroup.backendStateChangeProxies()
 			server.SendAlert()
 			if server.ClusterGroup.Conf.Autorejoin && server.ClusterGroup.IsActive() {
-				server.RejoinMaster()
+				server.RejoinMain()
 			} else {
 				server.ClusterGroup.LogPrintf("INFO", "Auto Rejoin is disabled")
 			}
 
-		} else if server.State != stateMaster && server.PrevState != stateUnconn {
-			// Master will never get discovery in topology if it does not get unconnected first it default to suspect
-			if server.ClusterGroup.GetTopology() != topoMultiMasterWsrep {
+		} else if server.State != stateMain && server.PrevState != stateUnconn {
+			// Main will never get discovery in topology if it does not get unconnected first it default to suspect
+			if server.ClusterGroup.GetTopology() != topoMultiMainWsrep {
 				server.State = stateUnconn
-				server.ClusterGroup.LogPrintf(LvlDbg, "State unconnected set by non-master rule on server %s", server.URL)
+				server.ClusterGroup.LogPrintf(LvlDbg, "State unconnected set by non-main rule on server %s", server.URL)
 			}
 			if server.ClusterGroup.Conf.ReadOnly && server.HaveWsrep == false && server.ClusterGroup.IsDiscovered() && !server.ClusterGroup.IsInIgnoredReadonly(server) {
-				server.ClusterGroup.LogPrintf(LvlInfo, "Setting Read Only on unconnected server: %s no master state and replication found", server.URL)
+				server.ClusterGroup.LogPrintf(LvlInfo, "Setting Read Only on unconnected server: %s no main state and replication found", server.URL)
 				server.SetReadOnly()
 			}
 
@@ -477,7 +477,7 @@ func (server *ServerMonitor) Ping(wg *sync.WaitGroup) {
 
 	} else if server.ClusterGroup.IsActive() && errss == nil && (server.PrevState == stateFailed) {
 
-		server.rejoinSlave(ss)
+		server.rejoinSubordinate(ss)
 	}
 
 	if server.PrevState != server.State {
@@ -489,9 +489,9 @@ func (server *ServerMonitor) Ping(wg *sync.WaitGroup) {
 	}
 }
 
-func (server *ServerMonitor) ProcessFailedSlave() {
+func (server *ServerMonitor) ProcessFailedSubordinate() {
 
-	if server.State == stateSlaveErr {
+	if server.State == stateSubordinateErr {
 		if server.ClusterGroup.Conf.ReplicationErrorScript != "" {
 			server.ClusterGroup.LogPrintf("INFO", "Calling replication error script")
 			var out []byte
@@ -502,7 +502,7 @@ func (server *ServerMonitor) ProcessFailedSlave() {
 			server.ClusterGroup.LogPrintf("INFO", "Replication error script complete:", string(out))
 		}
 		if server.HasReplicationSQLThreadRunning() && server.ClusterGroup.Conf.ReplicationRestartOnSQLErrorMatch != "" {
-			ss, err := server.GetSlaveStatus(server.ReplicationSourceName)
+			ss, err := server.GetSubordinateStatus(server.ReplicationSourceName)
 			if err != nil {
 				return
 			}
@@ -510,10 +510,10 @@ func (server *ServerMonitor) ProcessFailedSlave() {
 			if err != nil {
 				server.ClusterGroup.LogPrintf("ERROR", "Rexep failed replication-restart-on-sqlerror-match %s %s", server.ClusterGroup.Conf.ReplicationRestartOnSQLErrorMatch, err)
 			} else if matched {
-				server.ClusterGroup.LogPrintf("INFO", "Rexep restart slave  %s  matching: %s", server.ClusterGroup.Conf.ReplicationRestartOnSQLErrorMatch, ss.LastSQLError.String)
+				server.ClusterGroup.LogPrintf("INFO", "Rexep restart subordinate  %s  matching: %s", server.ClusterGroup.Conf.ReplicationRestartOnSQLErrorMatch, ss.LastSQLError.String)
 				server.SkipReplicationEvent()
-				server.StartSlave()
-				server.ClusterGroup.LogPrintf("INFO", "Skip event and restart slave on %s", server.URL)
+				server.StartSubordinate()
+				server.ClusterGroup.LogPrintf("INFO", "Skip event and restart subordinate on %s", server.URL)
 			}
 		}
 	}
@@ -577,8 +577,8 @@ func (server *ServerMonitor) Refresh() error {
 			server.HaveBinlogAnnotate = server.HasBinlogRowAnnotate()
 			server.HaveBinlogSync = server.HasBinlogDurable()
 			server.HaveBinlogCompress = server.HasBinlogCompress()
-			server.HaveBinlogSlaveUpdates = server.HasBinlogSlaveUpdates()
-			server.HaveBinlogSlowqueries = server.HasBinlogSlowSlaveQueries()
+			server.HaveBinlogSubordinateUpdates = server.HasBinlogSubordinateUpdates()
+			server.HaveBinlogSlowqueries = server.HasBinlogSlowSubordinateQueries()
 			server.HaveGtidStrictMode = server.HasGtidStrictMode()
 			server.HaveInnodbTrxCommit = server.HasInnoDBRedoLogDurable()
 			server.HaveChecksum = server.HasInnoDBChecksum()
@@ -594,13 +594,13 @@ func (server *ServerMonitor) Refresh() error {
 			if server.DBVersion.IsMariaDB() {
 				server.GTIDBinlogPos = gtid.NewList(server.Variables["GTID_BINLOG_POS"])
 				server.CurrentGtid = gtid.NewList(server.Variables["GTID_CURRENT_POS"])
-				server.SlaveGtid = gtid.NewList(server.Variables["GTID_SLAVE_POS"])
+				server.SubordinateGtid = gtid.NewList(server.Variables["GTID_SLAVE_POS"])
 
 			} else {
 				server.GTIDBinlogPos = gtid.NewMySQLList(server.Variables["GTID_EXECUTED"])
 				server.GTIDExecuted = server.Variables["GTID_EXECUTED"]
 				server.CurrentGtid = gtid.NewMySQLList(server.Variables["GTID_EXECUTED"])
-				server.SlaveGtid = gtid.NewList(server.Variables["GTID_SLAVE_POS"])
+				server.SubordinateGtid = gtid.NewList(server.Variables["GTID_SLAVE_POS"])
 			}
 
 			var sid uint64
@@ -641,12 +641,12 @@ func (server *ServerMonitor) Refresh() error {
 	}
 	// SHOW MASTER STATUS
 	logs := ""
-	server.MasterStatus, logs, err = dbhelper.GetMasterStatus(server.Conn, server.DBVersion)
-	server.ClusterGroup.LogSQL(logs, err, server.URL, "Monitor", LvlDbg, "Could not get master status %s %s", server.URL, err)
+	server.MainStatus, logs, err = dbhelper.GetMainStatus(server.Conn, server.DBVersion)
+	server.ClusterGroup.LogSQL(logs, err, server.URL, "Monitor", LvlDbg, "Could not get main status %s %s", server.URL, err)
 	if err != nil {
 		// binary log might be closed for that server
 	} else {
-		server.BinaryLogFile = server.MasterStatus.File
+		server.BinaryLogFile = server.MainStatus.File
 		if server.BinaryLogFilePrevious != "" && server.BinaryLogFilePrevious != server.BinaryLogFile {
 			server.BinaryLogFiles, logs, err = dbhelper.GetBinaryLogs(server.Conn, server.DBVersion)
 			server.ClusterGroup.LogSQL(logs, err, server.URL, "Monitor", LvlDbg, "Could not get binary log files %s %s", server.URL, err)
@@ -656,7 +656,7 @@ func (server *ServerMonitor) Refresh() error {
 			}
 		}
 		server.BinaryLogFilePrevious = server.BinaryLogFile
-		server.BinaryLogPos = strconv.FormatUint(uint64(server.MasterStatus.Position), 10)
+		server.BinaryLogPos = strconv.FormatUint(uint64(server.MainStatus.Position), 10)
 	}
 
 	if !server.DBVersion.IsPPostgreSQL() {
@@ -693,46 +693,46 @@ func (server *ServerMonitor) Refresh() error {
 	// SHOW SLAVE STATUS
 
 	if !(server.ClusterGroup.Conf.MxsBinlogOn && server.IsMaxscale) && server.DBVersion.IsMariaDB() || server.DBVersion.IsPPostgreSQL() {
-		server.Replications, logs, err = dbhelper.GetAllSlavesStatus(server.Conn, server.DBVersion)
+		server.Replications, logs, err = dbhelper.GetAllSubordinatesStatus(server.Conn, server.DBVersion)
 		if len(server.Replications) > 0 && err == nil && server.DBVersion.IsPPostgreSQL() && server.ReplicationSourceName == "" {
 			//setting first subscription if we don't have one
 			server.ReplicationSourceName = server.Replications[0].ConnectionName.String
 		}
 	} else {
-		server.Replications, logs, err = dbhelper.GetChannelSlaveStatus(server.Conn, server.DBVersion)
+		server.Replications, logs, err = dbhelper.GetChannelSubordinateStatus(server.Conn, server.DBVersion)
 	}
-	server.ClusterGroup.LogSQL(logs, err, server.URL, "Monitor", LvlDbg, "Could not get slaves status %s %s", server.URL, err)
+	server.ClusterGroup.LogSQL(logs, err, server.URL, "Monitor", LvlDbg, "Could not get subordinates status %s %s", server.URL, err)
 
 	// select a replication status get an err if repliciations array is empty
-	server.SlaveStatus, err = server.GetSlaveStatus(server.ReplicationSourceName)
+	server.SubordinateStatus, err = server.GetSubordinateStatus(server.ReplicationSourceName)
 	if err != nil {
-		// Do not reset  server.MasterServerID = 0 as we may need it for recovery
-		server.IsSlave = false
+		// Do not reset  server.MainServerID = 0 as we may need it for recovery
+		server.IsSubordinate = false
 	} else {
 
-		server.IsSlave = true
+		server.IsSubordinate = true
 		if server.DBVersion.IsPPostgreSQL() {
 			//PostgresQL as no server_id concept mimic via internal server id for topology detection
 			var sid uint64
-			sid, err = strconv.ParseUint(strconv.FormatUint(crc64.Checksum([]byte(server.SlaveStatus.MasterHost.String+server.SlaveStatus.MasterPort.String), server.CrcTable), 10), 10, 64)
+			sid, err = strconv.ParseUint(strconv.FormatUint(crc64.Checksum([]byte(server.SubordinateStatus.MainHost.String+server.SubordinateStatus.MainPort.String), server.CrcTable), 10), 10, 64)
 			if err != nil {
 				server.ClusterGroup.LogPrintf(LvlWarn, "PG Could not assign server_id s", err)
 			}
-			server.SlaveStatus.MasterServerID = sid
+			server.SubordinateStatus.MainServerID = sid
 			for i := range server.Replications {
-				server.Replications[i].MasterServerID = sid
+				server.Replications[i].MainServerID = sid
 			}
 
-			server.SlaveGtid = gtid.NewList(server.SlaveStatus.GtidSlavePos.String)
+			server.SubordinateGtid = gtid.NewList(server.SubordinateStatus.GtidSubordinatePos.String)
 
 		} else {
-			if server.SlaveStatus.UsingGtid.String == "Slave_Pos" || server.SlaveStatus.UsingGtid.String == "Current_Pos" {
+			if server.SubordinateStatus.UsingGtid.String == "Subordinate_Pos" || server.SubordinateStatus.UsingGtid.String == "Current_Pos" {
 				server.HaveMariaDBGTID = true
 			} else {
 				server.HaveMariaDBGTID = false
 			}
 			if server.DBVersion.IsMySQLOrPerconaGreater57() && server.HasGTIDReplication() {
-				server.SlaveGtid = gtid.NewList(server.SlaveStatus.ExecutedGtidSet.String)
+				server.SubordinateGtid = gtid.NewList(server.SubordinateStatus.ExecutedGtidSet.String)
 			}
 		}
 	}
@@ -752,14 +752,14 @@ func (server *ServerMonitor) Refresh() error {
 		server.HaveSemiSync = true
 	}
 	if server.Status["RPL_SEMI_SYNC_MASTER_STATUS"] == "ON" {
-		server.SemiSyncMasterStatus = true
+		server.SemiSyncMainStatus = true
 	} else {
-		server.SemiSyncMasterStatus = false
+		server.SemiSyncMainStatus = false
 	}
 	if server.Status["RPL_SEMI_SYNC_SLAVE_STATUS"] == "ON" {
-		server.SemiSyncSlaveStatus = true
+		server.SemiSyncSubordinateStatus = true
 	} else {
-		server.SemiSyncSlaveStatus = false
+		server.SemiSyncSubordinateStatus = false
 	}
 
 	if server.Status["WSREP_LOCAL_STATE"] == "4" {
@@ -847,48 +847,48 @@ func (server *ServerMonitor) ReadAllRelayLogs() error {
 
 	server.ClusterGroup.LogPrintf(LvlInfo, "Reading all relay logs on %s", server.URL)
 	if server.DBVersion.IsMariaDB() && server.HaveMariaDBGTID {
-		ss, logs, err := dbhelper.GetMSlaveStatus(server.Conn, "", server.DBVersion)
-		server.ClusterGroup.LogSQL(logs, err, server.URL, "ReadAllRelayLogs", LvlErr, "Could not get slave status %s %s", server.URL, err)
+		ss, logs, err := dbhelper.GetMSubordinateStatus(server.Conn, "", server.DBVersion)
+		server.ClusterGroup.LogSQL(logs, err, server.URL, "ReadAllRelayLogs", LvlErr, "Could not get subordinate status %s %s", server.URL, err)
 		if err != nil {
 			return err
 		}
 		server.Refresh()
 		myGtid_IO_Pos := gtid.NewList(ss.GtidIOPos.String)
-		myGtid_Slave_Pos := server.SlaveGtid
-		//myGtid_Slave_Pos := gtid.NewList(ss.GtidSlavePos.String)
+		myGtid_Subordinate_Pos := server.SubordinateGtid
+		//myGtid_Subordinate_Pos := gtid.NewList(ss.GtidSubordinatePos.String)
 		//https://jira.mariadb.org/browse/MDEV-14182
 
-		for myGtid_Slave_Pos.Equal(myGtid_IO_Pos) == false && ss.UsingGtid.String != "" && ss.GtidSlavePos.String != "" && server.State != stateFailed {
+		for myGtid_Subordinate_Pos.Equal(myGtid_IO_Pos) == false && ss.UsingGtid.String != "" && ss.GtidSubordinatePos.String != "" && server.State != stateFailed {
 			server.Refresh()
-			ss, logs, err = dbhelper.GetMSlaveStatus(server.Conn, server.ClusterGroup.Conf.MasterConn, server.DBVersion)
-			server.ClusterGroup.LogSQL(logs, err, server.URL, "ReadAllRelayLogs", LvlErr, "Could not get slave status %s %s", server.URL, err)
+			ss, logs, err = dbhelper.GetMSubordinateStatus(server.Conn, server.ClusterGroup.Conf.MainConn, server.DBVersion)
+			server.ClusterGroup.LogSQL(logs, err, server.URL, "ReadAllRelayLogs", LvlErr, "Could not get subordinate status %s %s", server.URL, err)
 
 			if err != nil {
 				return err
 			}
 			time.Sleep(500 * time.Millisecond)
 			myGtid_IO_Pos = gtid.NewList(ss.GtidIOPos.String)
-			myGtid_Slave_Pos = server.SlaveGtid
+			myGtid_Subordinate_Pos = server.SubordinateGtid
 
-			server.ClusterGroup.LogPrintf(LvlInfo, "Waiting sync IO_Pos:%s, Slave_Pos:%s", myGtid_IO_Pos.Sprint(), myGtid_Slave_Pos.Sprint())
+			server.ClusterGroup.LogPrintf(LvlInfo, "Waiting sync IO_Pos:%s, Subordinate_Pos:%s", myGtid_IO_Pos.Sprint(), myGtid_Subordinate_Pos.Sprint())
 		}
 	} else {
-		ss, logs, err := dbhelper.GetSlaveStatus(server.Conn, server.ClusterGroup.Conf.MasterConn, server.DBVersion)
-		server.ClusterGroup.LogSQL(logs, err, server.URL, "ReadAllRelayLogs", LvlErr, "Could not get slave status %s %s", server.URL, err)
+		ss, logs, err := dbhelper.GetSubordinateStatus(server.Conn, server.ClusterGroup.Conf.MainConn, server.DBVersion)
+		server.ClusterGroup.LogSQL(logs, err, server.URL, "ReadAllRelayLogs", LvlErr, "Could not get subordinate status %s %s", server.URL, err)
 		if err != nil {
 			return err
 		}
 		for true {
-			server.ClusterGroup.LogPrintf(LvlInfo, "Waiting sync IO_Pos:%s/%s, Slave_Pos:%s %s", ss.MasterLogFile, ss.ReadMasterLogPos.String, ss.RelayMasterLogFile, ss.ExecMasterLogPos.String)
-			if ss.MasterLogFile == ss.RelayMasterLogFile && ss.ReadMasterLogPos == ss.ExecMasterLogPos {
+			server.ClusterGroup.LogPrintf(LvlInfo, "Waiting sync IO_Pos:%s/%s, Subordinate_Pos:%s %s", ss.MainLogFile, ss.ReadMainLogPos.String, ss.RelayMainLogFile, ss.ExecMainLogPos.String)
+			if ss.MainLogFile == ss.RelayMainLogFile && ss.ReadMainLogPos == ss.ExecMainLogPos {
 				break
 			}
-			ss, logs, err = dbhelper.GetSlaveStatus(server.Conn, server.ClusterGroup.Conf.MasterConn, server.DBVersion)
-			server.ClusterGroup.LogSQL(logs, err, server.URL, "ReadAllRelayLogs", LvlErr, "Could not get slave status %s %s", server.URL, err)
+			ss, logs, err = dbhelper.GetSubordinateStatus(server.Conn, server.ClusterGroup.Conf.MainConn, server.DBVersion)
+			server.ClusterGroup.LogSQL(logs, err, server.URL, "ReadAllRelayLogs", LvlErr, "Could not get subordinate status %s %s", server.URL, err)
 			if err != nil {
 				return err
 			}
-			if strings.Contains(ss.SlaveSQLRunningState.String, "Slave has read all relay log") {
+			if strings.Contains(ss.SubordinateSQLRunningState.String, "Subordinate has read all relay log") {
 				break
 			}
 
@@ -900,7 +900,7 @@ func (server *ServerMonitor) ReadAllRelayLogs() error {
 
 func (server *ServerMonitor) LogReplPostion() {
 	server.Refresh()
-	server.ClusterGroup.LogPrintf(LvlInfo, "Server:%s Current GTID:%s Slave GTID:%s Binlog Pos:%s", server.URL, server.CurrentGtid.Sprint(), server.SlaveGtid.Sprint(), server.GTIDBinlogPos.Sprint())
+	server.ClusterGroup.LogPrintf(LvlInfo, "Server:%s Current GTID:%s Subordinate GTID:%s Binlog Pos:%s", server.URL, server.CurrentGtid.Sprint(), server.SubordinateGtid.Sprint(), server.GTIDBinlogPos.Sprint())
 	return
 }
 
@@ -935,33 +935,33 @@ func (server *ServerMonitor) delete(sl *serverList) {
 	*sl = lsm
 }
 
-func (server *ServerMonitor) StopSlave() (string, error) {
-	return dbhelper.StopSlave(server.Conn, server.ClusterGroup.Conf.MasterConn, server.DBVersion)
+func (server *ServerMonitor) StopSubordinate() (string, error) {
+	return dbhelper.StopSubordinate(server.Conn, server.ClusterGroup.Conf.MainConn, server.DBVersion)
 }
 
-func (server *ServerMonitor) StartSlave() (string, error) {
-	return dbhelper.StartSlave(server.Conn, server.ClusterGroup.Conf.MasterConn, server.DBVersion)
+func (server *ServerMonitor) StartSubordinate() (string, error) {
+	return dbhelper.StartSubordinate(server.Conn, server.ClusterGroup.Conf.MainConn, server.DBVersion)
 
 }
 
-func (server *ServerMonitor) ResetMaster() (string, error) {
-	return dbhelper.ResetMaster(server.Conn, server.ClusterGroup.Conf.MasterConn, server.DBVersion)
+func (server *ServerMonitor) ResetMain() (string, error) {
+	return dbhelper.ResetMain(server.Conn, server.ClusterGroup.Conf.MainConn, server.DBVersion)
 }
 
 func (server *ServerMonitor) ResetPFSQueries() error {
 	return server.ExecQueryNoBinLog("truncate performance_schema.events_statements_summary_by_digest")
 }
 
-func (server *ServerMonitor) StopSlaveIOThread() (string, error) {
-	return dbhelper.StopSlaveIOThread(server.Conn, server.ClusterGroup.Conf.MasterConn, server.DBVersion)
+func (server *ServerMonitor) StopSubordinateIOThread() (string, error) {
+	return dbhelper.StopSubordinateIOThread(server.Conn, server.ClusterGroup.Conf.MainConn, server.DBVersion)
 }
 
-func (server *ServerMonitor) StopSlaveSQLThread() (string, error) {
-	return dbhelper.StopSlaveSQLThread(server.Conn, server.ClusterGroup.Conf.MasterConn, server.DBVersion)
+func (server *ServerMonitor) StopSubordinateSQLThread() (string, error) {
+	return dbhelper.StopSubordinateSQLThread(server.Conn, server.ClusterGroup.Conf.MainConn, server.DBVersion)
 }
 
-func (server *ServerMonitor) ResetSlave() (string, error) {
-	return dbhelper.ResetSlave(server.Conn, true, server.ClusterGroup.Conf.MasterConn, server.DBVersion)
+func (server *ServerMonitor) ResetSubordinate() (string, error) {
+	return dbhelper.ResetSubordinate(server.Conn, true, server.ClusterGroup.Conf.MainConn, server.DBVersion)
 }
 
 func (server *ServerMonitor) FlushLogs() (string, error) {
@@ -981,9 +981,9 @@ func (server *ServerMonitor) Provision() {
 }
 
 func (server *ServerMonitor) SkipReplicationEvent() {
-	server.StopSlave()
-	dbhelper.SkipBinlogEvent(server.Conn, server.ClusterGroup.Conf.MasterConn, server.DBVersion)
-	server.StartSlave()
+	server.StopSubordinate()
+	dbhelper.SkipBinlogEvent(server.Conn, server.ClusterGroup.Conf.MainConn, server.DBVersion)
+	server.StartSubordinate()
 }
 
 func (server *ServerMonitor) KillThread(id string) (string, error) {
@@ -1073,7 +1073,7 @@ func (server *ServerMonitor) CaptureLoop(start int64) {
 		ProcessList  []dbhelper.Processlist `json:"processlist"`
 		InnoDBStatus string                 `json:"innodbstatus"`
 		Status       map[string]string      `json:"status"`
-		SlaveSatus   []dbhelper.SlaveStatus `json:"slavestatus"`
+		SubordinateSatus   []dbhelper.SubordinateStatus `json:"subordinatestatus"`
 	}
 
 	t := time.Now()
@@ -1092,11 +1092,11 @@ func (server *ServerMonitor) CaptureLoop(start int64) {
 		server.ClusterGroup.LogSQL(logs, err, server.URL, "CaptureLoop", LvlErr, "Failed Status for server %s: %s ", server.URL, err)
 
 		if !(server.ClusterGroup.Conf.MxsBinlogOn && server.IsMaxscale) && server.DBVersion.IsMariaDB() {
-			clsave.SlaveSatus, logs, err = dbhelper.GetAllSlavesStatus(server.Conn, server.DBVersion)
+			clsave.SubordinateSatus, logs, err = dbhelper.GetAllSubordinatesStatus(server.Conn, server.DBVersion)
 		} else {
-			clsave.SlaveSatus, logs, err = dbhelper.GetChannelSlaveStatus(server.Conn, server.DBVersion)
+			clsave.SubordinateSatus, logs, err = dbhelper.GetChannelSubordinateStatus(server.Conn, server.DBVersion)
 		}
-		server.ClusterGroup.LogSQL(logs, err, server.URL, "CaptureLoop", LvlErr, "Failed Slave Status for server %s: %s ", server.URL, err)
+		server.ClusterGroup.LogSQL(logs, err, server.URL, "CaptureLoop", LvlErr, "Failed Subordinate Status for server %s: %s ", server.URL, err)
 
 		saveJSON, _ := json.MarshalIndent(clsave, "", "\t")
 		err := ioutil.WriteFile(server.ClusterGroup.Conf.WorkingDir+"/"+server.ClusterGroup.Name+"/capture_"+server.Name+"_"+t.Format("20060102150405")+".json", saveJSON, 0644)
@@ -1168,77 +1168,77 @@ func (server *ServerMonitor) Shutdown() error {
 	return nil
 }
 
-func (server *ServerMonitor) ChangeMasterTo(master *ServerMonitor, master_use_gitd string) error {
+func (server *ServerMonitor) ChangeMainTo(main *ServerMonitor, main_use_gitd string) error {
 	logs := ""
 	var err error
 	hasMyGTID := server.HasMySQLGTID()
 	//mariadb
 
-	if server.State != stateFailed && server.ClusterGroup.Conf.ForceSlaveNoGtid == false && server.DBVersion.IsMariaDB() && server.DBVersion.Major >= 10 {
-		master.Refresh()
-		_, err = server.Conn.Exec("SET GLOBAL gtid_slave_pos = \"" + master.CurrentGtid.Sprint() + "\"")
+	if server.State != stateFailed && server.ClusterGroup.Conf.ForceSubordinateNoGtid == false && server.DBVersion.IsMariaDB() && server.DBVersion.Major >= 10 {
+		main.Refresh()
+		_, err = server.Conn.Exec("SET GLOBAL gtid_subordinate_pos = \"" + main.CurrentGtid.Sprint() + "\"")
 		if err != nil {
 			return err
 		}
-		logs, err = dbhelper.ChangeMaster(server.Conn, dbhelper.ChangeMasterOpt{
-			Host:        master.Host,
-			Port:        master.Port,
+		logs, err = dbhelper.ChangeMain(server.Conn, dbhelper.ChangeMainOpt{
+			Host:        main.Host,
+			Port:        main.Port,
 			User:        server.ClusterGroup.rplUser,
 			Password:    server.ClusterGroup.rplPass,
-			Retry:       strconv.Itoa(server.ClusterGroup.Conf.ForceSlaveHeartbeatRetry),
-			Heartbeat:   strconv.Itoa(server.ClusterGroup.Conf.ForceSlaveHeartbeatTime),
-			Mode:        master_use_gitd,
-			Channel:     server.ClusterGroup.Conf.MasterConn,
+			Retry:       strconv.Itoa(server.ClusterGroup.Conf.ForceSubordinateHeartbeatRetry),
+			Heartbeat:   strconv.Itoa(server.ClusterGroup.Conf.ForceSubordinateHeartbeatTime),
+			Mode:        main_use_gitd,
+			Channel:     server.ClusterGroup.Conf.MainConn,
 			IsDelayed:   server.IsDelayed,
 			Delay:       strconv.Itoa(server.ClusterGroup.Conf.HostsDelayedTime),
 			SSL:         server.ClusterGroup.Conf.ReplicationSSL,
 			PostgressDB: server.PostgressDB,
 		}, server.DBVersion)
-		server.ClusterGroup.LogPrintf(LvlInfo, "Replication bootstrapped with %s as master", master.URL)
-	} else if hasMyGTID && server.ClusterGroup.Conf.ForceSlaveNoGtid == false {
+		server.ClusterGroup.LogPrintf(LvlInfo, "Replication bootstrapped with %s as main", main.URL)
+	} else if hasMyGTID && server.ClusterGroup.Conf.ForceSubordinateNoGtid == false {
 
-		logs, err = dbhelper.ChangeMaster(server.Conn, dbhelper.ChangeMasterOpt{
-			Host:        master.Host,
-			Port:        master.Port,
+		logs, err = dbhelper.ChangeMain(server.Conn, dbhelper.ChangeMainOpt{
+			Host:        main.Host,
+			Port:        main.Port,
 			User:        server.ClusterGroup.rplUser,
 			Password:    server.ClusterGroup.rplPass,
-			Retry:       strconv.Itoa(server.ClusterGroup.Conf.ForceSlaveHeartbeatRetry),
-			Heartbeat:   strconv.Itoa(server.ClusterGroup.Conf.ForceSlaveHeartbeatTime),
+			Retry:       strconv.Itoa(server.ClusterGroup.Conf.ForceSubordinateHeartbeatRetry),
+			Heartbeat:   strconv.Itoa(server.ClusterGroup.Conf.ForceSubordinateHeartbeatTime),
 			Mode:        "MASTER_AUTO_POSITION",
 			IsDelayed:   server.IsDelayed,
 			Delay:       strconv.Itoa(server.ClusterGroup.Conf.HostsDelayedTime),
 			SSL:         server.ClusterGroup.Conf.ReplicationSSL,
-			Channel:     server.ClusterGroup.Conf.MasterConn,
+			Channel:     server.ClusterGroup.Conf.MainConn,
 			PostgressDB: server.PostgressDB,
 		}, server.DBVersion)
-		server.ClusterGroup.LogPrintf(LvlInfo, "Replication bootstrapped with MySQL GTID replication style and %s as master", master.URL)
+		server.ClusterGroup.LogPrintf(LvlInfo, "Replication bootstrapped with MySQL GTID replication style and %s as main", main.URL)
 
 	} else {
-		logs, err = dbhelper.ChangeMaster(server.Conn, dbhelper.ChangeMasterOpt{
-			Host:        master.Host,
-			Port:        master.Port,
+		logs, err = dbhelper.ChangeMain(server.Conn, dbhelper.ChangeMainOpt{
+			Host:        main.Host,
+			Port:        main.Port,
 			User:        server.ClusterGroup.rplUser,
 			Password:    server.ClusterGroup.rplPass,
-			Retry:       strconv.Itoa(server.ClusterGroup.Conf.ForceSlaveHeartbeatRetry),
-			Heartbeat:   strconv.Itoa(server.ClusterGroup.Conf.ForceSlaveHeartbeatTime),
+			Retry:       strconv.Itoa(server.ClusterGroup.Conf.ForceSubordinateHeartbeatRetry),
+			Heartbeat:   strconv.Itoa(server.ClusterGroup.Conf.ForceSubordinateHeartbeatTime),
 			Mode:        "POSITIONAL",
-			Logfile:     master.BinaryLogFile,
-			Logpos:      master.BinaryLogPos,
-			Channel:     server.ClusterGroup.Conf.MasterConn,
+			Logfile:     main.BinaryLogFile,
+			Logpos:      main.BinaryLogPos,
+			Channel:     server.ClusterGroup.Conf.MainConn,
 			IsDelayed:   server.IsDelayed,
 			Delay:       strconv.Itoa(server.ClusterGroup.Conf.HostsDelayedTime),
 			SSL:         server.ClusterGroup.Conf.ReplicationSSL,
 			PostgressDB: server.PostgressDB,
 		}, server.DBVersion)
-		server.ClusterGroup.LogPrintf(LvlInfo, "Replication bootstrapped with old replication style and %s as master", master.URL)
+		server.ClusterGroup.LogPrintf(LvlInfo, "Replication bootstrapped with old replication style and %s as main", main.URL)
 
 	}
 	if err != nil {
-		server.ClusterGroup.LogSQL(logs, err, server.URL, "BootstrapReplication", LvlErr, "Replication can't be bootstrap for server %s with %s as master: %s ", server.URL, master.URL, err)
+		server.ClusterGroup.LogSQL(logs, err, server.URL, "BootstrapReplication", LvlErr, "Replication can't be bootstrap for server %s with %s as main: %s ", server.URL, main.URL, err)
 	}
-	_, err = server.Conn.Exec("START SLAVE '" + server.ClusterGroup.Conf.MasterConn + "'")
+	_, err = server.Conn.Exec("START SLAVE '" + server.ClusterGroup.Conf.MainConn + "'")
 	if err != nil {
-		err = errors.New(fmt.Sprintln("Can't start slave: ", err))
+		err = errors.New(fmt.Sprintln("Can't start subordinate: ", err))
 	}
 	return err
 }

@@ -74,7 +74,7 @@ func (cluster *Cluster) PrepareBench() error {
 		cluster.LogPrintf("BENCH", "%s", string(out))
 	}
 	if cluster.benchmarkType == "table" {
-		result, err := dbhelper.WriteConcurrent2(cluster.GetMaster().DSN, 10)
+		result, err := dbhelper.WriteConcurrent2(cluster.GetMain().DSN, 10)
 		if err != nil {
 			cluster.LogPrintf(LvlErr, "%s %s", err.Error(), result)
 		} else {
@@ -110,7 +110,7 @@ func (cluster *Cluster) CleanupBench() error {
 	}
 	if cluster.benchmarkType == "table" {
 
-		err := dbhelper.BenchCleanup(cluster.GetMaster().Conn)
+		err := dbhelper.BenchCleanup(cluster.GetMain().Conn)
 		if err != nil {
 			cluster.LogPrintf(LvlErr, "%s", err.Error())
 		}
@@ -121,13 +121,13 @@ func (cluster *Cluster) CleanupBench() error {
 func (cluster *Cluster) ChecksumBench() bool {
 	if cluster.benchmarkType == "table" {
 		if cluster.CheckTableConsistency("replication_manager_schema.bench") != true {
-			cluster.LogPrintf(LvlErr, "Inconsitant slave")
+			cluster.LogPrintf(LvlErr, "Inconsitant subordinate")
 			return false
 		}
 	}
 	if cluster.benchmarkType == "sysbench" {
 		if cluster.CheckTableConsistency("test.sbtest") != true {
-			cluster.LogPrintf(LvlErr, "Inconsitant slave")
+			cluster.LogPrintf(LvlErr, "Inconsitant subordinate")
 			return false
 		}
 	}
@@ -168,7 +168,7 @@ func (cluster *Cluster) RunBench() error {
 		cluster.LogPrintf("BENCH", "%s", string(out))
 	}
 	if cluster.benchmarkType == "table" {
-		result, err := dbhelper.WriteConcurrent2(cluster.GetMaster().DSN, 10)
+		result, err := dbhelper.WriteConcurrent2(cluster.GetMain().DSN, 10)
 		if err != nil {
 			cluster.LogPrintf(LvlErr, "%s %s", err.Error(), result)
 		}
@@ -184,20 +184,20 @@ func (cluster *Cluster) RunSysbench() error {
 	return nil
 }
 
-func (cluster *Cluster) CheckSlavesRunning() bool {
+func (cluster *Cluster) CheckSubordinatesRunning() bool {
 	time.Sleep(2 * time.Second)
-	for _, s := range cluster.slaves {
-		ss, errss := s.GetSlaveStatus(s.ReplicationSourceName)
+	for _, s := range cluster.subordinates {
+		ss, errss := s.GetSubordinateStatus(s.ReplicationSourceName)
 		if errss != nil {
 			return false
 		}
-		if ss.SlaveIORunning.String != "Yes" || ss.SlaveSQLRunning.String != "Yes" {
-			cluster.LogPrintf("TEST", "Slave  %s issue on replication  SQL Thread %s IO Thread %s ", s.URL, ss.SlaveSQLRunning.String, ss.SlaveIORunning.String)
+		if ss.SubordinateIORunning.String != "Yes" || ss.SubordinateSQLRunning.String != "Yes" {
+			cluster.LogPrintf("TEST", "Subordinate  %s issue on replication  SQL Thread %s IO Thread %s ", s.URL, ss.SubordinateSQLRunning.String, ss.SubordinateIORunning.String)
 
 			return false
 		}
-		if ss.MasterServerID != cluster.master.ServerID {
-			cluster.LogPrintf("TEST", "Replication is  pointing to wrong master %s ", cluster.master.ServerID)
+		if ss.MainServerID != cluster.main.ServerID {
+			cluster.LogPrintf("TEST", "Replication is  pointing to wrong main %s ", cluster.main.ServerID)
 			return false
 		}
 	}
@@ -205,66 +205,66 @@ func (cluster *Cluster) CheckSlavesRunning() bool {
 }
 
 func (cluster *Cluster) CheckTableConsistency(table string) bool {
-	checksum, err := dbhelper.ChecksumTable(cluster.master.Conn, table)
+	checksum, err := dbhelper.ChecksumTable(cluster.main.Conn, table)
 
 	if err != nil {
-		cluster.LogPrintf(LvlErr, "Failed to take master checksum table ")
+		cluster.LogPrintf(LvlErr, "Failed to take main checksum table ")
 	} else {
-		cluster.LogPrintf(LvlInfo, "Checksum master table %s =  %s %s", table, checksum, cluster.master.URL)
+		cluster.LogPrintf(LvlInfo, "Checksum main table %s =  %s %s", table, checksum, cluster.main.URL)
 	}
 	var count int
-	err = cluster.master.Conn.QueryRowx("select count(*) from " + table).Scan(&count)
+	err = cluster.main.Conn.QueryRowx("select count(*) from " + table).Scan(&count)
 	if err != nil {
 		cluster.LogPrintf(LvlErr, "Could count record in bench table", err)
 	} else {
-		cluster.LogPrintf(LvlInfo, "Number of rows master table %s = %d %s", table, count, cluster.master.URL)
+		cluster.LogPrintf(LvlInfo, "Number of rows main table %s = %d %s", table, count, cluster.main.URL)
 	}
 	var max int
 	if cluster.benchmarkType == "table" {
 
-		err = cluster.master.Conn.QueryRowx("select max(val) from " + table).Scan(&max)
+		err = cluster.main.Conn.QueryRowx("select max(val) from " + table).Scan(&max)
 		if err != nil {
 			cluster.LogPrintf(LvlErr, "Could get max val in bench table", err)
 		} else {
-			cluster.LogPrintf(LvlInfo, "Max Value in bench table %s = %d %s", table, max, cluster.master.URL)
+			cluster.LogPrintf(LvlInfo, "Max Value in bench table %s = %d %s", table, max, cluster.main.URL)
 		}
 	}
-	ctslave := 0
-	for _, s := range cluster.slaves {
-		ctslave++
+	ctsubordinate := 0
+	for _, s := range cluster.subordinates {
+		ctsubordinate++
 
-		checksumslave, err := dbhelper.ChecksumTable(s.Conn, table)
+		checksumsubordinate, err := dbhelper.ChecksumTable(s.Conn, table)
 		if err != nil {
-			cluster.LogPrintf(LvlErr, "Failed to take slave checksum table ")
+			cluster.LogPrintf(LvlErr, "Failed to take subordinate checksum table ")
 		} else {
-			cluster.LogPrintf(LvlInfo, "Checksum slave table %s = %s on %s ", table, checksumslave, s.URL)
+			cluster.LogPrintf(LvlInfo, "Checksum subordinate table %s = %s on %s ", table, checksumsubordinate, s.URL)
 		}
 		err = s.Conn.QueryRowx("select count(*) from " + table).Scan(&count)
 		if err != nil {
 			log.Println("ERROR: Could not check long running writes", err)
 		} else {
-			cluster.LogPrintf(LvlInfo, "Number of rows slave table %s =  %d %s", table, count, s.URL)
+			cluster.LogPrintf(LvlInfo, "Number of rows subordinate table %s =  %d %s", table, count, s.URL)
 		}
-		var maxslave int
+		var maxsubordinate int
 		if cluster.benchmarkType == "table" {
-			err = s.Conn.QueryRowx("select max(val) from " + table).Scan(&maxslave)
+			err = s.Conn.QueryRowx("select max(val) from " + table).Scan(&maxsubordinate)
 			if err != nil {
 				cluster.LogPrintf(LvlErr, "Could get max val in bench table", err)
 			} else {
-				cluster.LogPrintf(LvlInfo, "Max Value in bench table %s = %d %s", table, maxslave, s.URL)
+				cluster.LogPrintf(LvlInfo, "Max Value in bench table %s = %d %s", table, maxsubordinate, s.URL)
 			}
 		}
-		if checksumslave != checksum && cluster.benchmarkType == "sysbench" {
-			cluster.LogPrintf(LvlErr, "Checksum on slave is different from master")
+		if checksumsubordinate != checksum && cluster.benchmarkType == "sysbench" {
+			cluster.LogPrintf(LvlErr, "Checksum on subordinate is different from main")
 			return false
 		}
-		if maxslave != max && cluster.benchmarkType == "table" {
-			cluster.LogPrintf(LvlErr, "Max table value on slave is different from master")
+		if maxsubordinate != max && cluster.benchmarkType == "table" {
+			cluster.LogPrintf(LvlErr, "Max table value on subordinate is different from main")
 			return false
 		}
 	}
-	if ctslave == 0 {
-		cluster.LogPrintf(LvlErr, "No slaves while checking consistancy")
+	if ctsubordinate == 0 {
+		cluster.LogPrintf(LvlErr, "No subordinates while checking consistancy")
 		return false
 	}
 	return true
@@ -273,7 +273,7 @@ func (cluster *Cluster) FailoverAndWait() {
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
 	go cluster.WaitFailover(wg)
-	cluster.StopDatabaseService(cluster.GetMaster())
+	cluster.StopDatabaseService(cluster.GetMain())
 	wg.Wait()
 }
 
@@ -281,9 +281,9 @@ func (cluster *Cluster) FailoverNow() {
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
 	go cluster.WaitFailover(wg)
-	cluster.SetMasterStateFailed()
+	cluster.SetMainStateFailed()
 	cluster.SetInteractive(false)
-	cluster.GetMaster().FailCount = cluster.GetMaxFail()
+	cluster.GetMain().FailCount = cluster.GetMaxFail()
 	wg.Wait()
 }
 
@@ -296,30 +296,30 @@ func (cluster *Cluster) StartDatabaseWaitRejoin(server *ServerMonitor) error {
 	return err
 }
 
-func (cluster *Cluster) DelayAllSlaves() error {
-	cluster.LogPrintf("BENCH", "Stopping slaves, injecting data & long transaction")
-	for _, s := range cluster.slaves {
-		_, err := s.StopSlaveSQLThread()
+func (cluster *Cluster) DelayAllSubordinates() error {
+	cluster.LogPrintf("BENCH", "Stopping subordinates, injecting data & long transaction")
+	for _, s := range cluster.subordinates {
+		_, err := s.StopSubordinateSQLThread()
 		if err != nil {
-			cluster.LogPrintf(LvlErr, "Stopping slave on %s %s", s.URL, err)
+			cluster.LogPrintf(LvlErr, "Stopping subordinate on %s %s", s.URL, err)
 		}
 	}
-	result, err := dbhelper.WriteConcurrent2(cluster.master.DSN, 1000)
+	result, err := dbhelper.WriteConcurrent2(cluster.main.DSN, 1000)
 	if err != nil {
 		cluster.LogPrintf(LvlErr, "%s %s", err.Error(), result)
 	}
-	err = dbhelper.InjectLongTrx(cluster.master.Conn, 12)
+	err = dbhelper.InjectLongTrx(cluster.main.Conn, 12)
 	if err != nil {
 		cluster.LogPrintf(LvlErr, "InjectLongTrx %s", err.Error())
 	}
-	result, err = dbhelper.WriteConcurrent2(cluster.master.DSN, 1000)
+	result, err = dbhelper.WriteConcurrent2(cluster.main.DSN, 1000)
 	if err != nil {
 		cluster.LogPrintf(LvlErr, "%s %s", err.Error(), result)
 	}
-	for _, s := range cluster.slaves {
-		_, err := s.StartSlave()
+	for _, s := range cluster.subordinates {
+		_, err := s.StartSubordinate()
 		if err != nil {
-			cluster.LogPrintf(LvlErr, "Staring slave on %s %s", s.URL, err)
+			cluster.LogPrintf(LvlErr, "Staring subordinate on %s %s", s.URL, err)
 		}
 	}
 	time.Sleep(5 * time.Second)
@@ -328,7 +328,7 @@ func (cluster *Cluster) DelayAllSlaves() error {
 
 func (cluster *Cluster) InitBenchTable() error {
 
-	result, err := dbhelper.WriteConcurrent2(cluster.GetMaster().DSN, 10)
+	result, err := dbhelper.WriteConcurrent2(cluster.GetMain().DSN, 10)
 	if err != nil {
 		cluster.LogPrintf(LvlErr, "Insert some events %s %s", err.Error(), result)
 		return err
@@ -382,12 +382,12 @@ func (cluster *Cluster) RestoreConf() {
 
 func (cluster *Cluster) DisableSemisync() error {
 	for _, s := range cluster.Servers {
-		_, err := s.Conn.Exec("set global rpl_semi_sync_master_enabled='OFF'")
+		_, err := s.Conn.Exec("set global rpl_semi_sync_main_enabled='OFF'")
 		if err != nil {
 
 			return err
 		}
-		_, err = s.Conn.Exec("set global rpl_semi_sync_slave_enabled='OFF'")
+		_, err = s.Conn.Exec("set global rpl_semi_sync_subordinate_enabled='OFF'")
 		if err != nil {
 
 			return err
@@ -397,12 +397,12 @@ func (cluster *Cluster) DisableSemisync() error {
 }
 func (cluster *Cluster) EnableSemisync() error {
 	for _, s := range cluster.Servers {
-		_, err := s.Conn.Exec("set global rpl_semi_sync_master_enabled='ON'")
+		_, err := s.Conn.Exec("set global rpl_semi_sync_main_enabled='ON'")
 		if err != nil {
 
 			return err
 		}
-		_, err = s.Conn.Exec("set global rpl_semi_sync_slave_enabled='ON'")
+		_, err = s.Conn.Exec("set global rpl_semi_sync_subordinate_enabled='ON'")
 		if err != nil {
 
 			return err
@@ -410,10 +410,10 @@ func (cluster *Cluster) EnableSemisync() error {
 	}
 	return nil
 }
-func (cluster *Cluster) StopSlaves() error {
+func (cluster *Cluster) StopSubordinates() error {
 	cluster.LogPrintf("BENCH", "Stopping replication")
-	for _, s := range cluster.slaves {
-		_, err := s.StopSlave()
+	for _, s := range cluster.subordinates {
+		_, err := s.StopSubordinate()
 		if err != nil {
 			return err
 		}
@@ -421,10 +421,10 @@ func (cluster *Cluster) StopSlaves() error {
 	return nil
 }
 
-func (cluster *Cluster) StartSlaves() error {
+func (cluster *Cluster) StartSubordinates() error {
 	cluster.LogPrintf("BENCH", "Sarting replication")
-	for _, s := range cluster.slaves {
-		_, err := s.StartSlave()
+	for _, s := range cluster.subordinates {
+		_, err := s.StartSubordinate()
 		if err != nil {
 			return err
 		}
@@ -433,8 +433,8 @@ func (cluster *Cluster) StartSlaves() error {
 }
 
 func (cluster *Cluster) ForgetTopology() error {
-	cluster.master = nil
-	cluster.vmaster = nil
-	cluster.slaves = nil
+	cluster.main = nil
+	cluster.vmain = nil
+	cluster.subordinates = nil
 	return nil
 }

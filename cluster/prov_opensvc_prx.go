@@ -511,7 +511,7 @@ user_admin = ` + prx.User + `
 password_admin = ` + prx.Pass + `
 mrm_api_addr = ` + cluster.Conf.MonitorAddress + ":" + cluster.Conf.HttpPort + `
 mrm_cluster_name = ` + cluster.GetClusterName() + `
-proxysql_read_on_master =  ` + prx.ProxySQLReadOnMaster() + `
+proxysql_read_on_main =  ` + prx.ProxySQLReadOnMain() + `
 `
 	return conf
 }
@@ -526,7 +526,7 @@ func (proxy *Proxy) GetPRXEnv() map[string]string {
 
 		"%%ENV:SERVER_IP%%":                            "0.0.0.0",
 		"%%ENV:SERVER_PORT%%":                          proxy.Port,
-		"%%ENV:SVC_CONF_ENV_PROXYSQL_READ_ON_MASTER%%": proxy.ProxySQLReadOnMaster(),
+		"%%ENV:SVC_CONF_ENV_PROXYSQL_READ_ON_MASTER%%": proxy.ProxySQLReadOnMain(),
 	}
 
 }

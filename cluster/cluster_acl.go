@@ -165,25 +165,25 @@ func (cluster *Cluster) IsURLPassDatabasesACL(strUser string, URL string) bool {
 		}
 	}
 	if cluster.APIUsers[strUser].Grants[config.GrantDBReplication] {
-		if strings.Contains(URL, "/all-slaves-status") {
+		if strings.Contains(URL, "/all-subordinates-status") {
 			return true
 		}
-		if strings.Contains(URL, "/master-status") {
+		if strings.Contains(URL, "/main-status") {
 			return true
 		}
-		if strings.Contains(URL, "actions/start-slave") {
+		if strings.Contains(URL, "actions/start-subordinate") {
 			return true
 		}
-		if strings.Contains(URL, "actions/stop-slave") {
+		if strings.Contains(URL, "actions/stop-subordinate") {
 			return true
 		}
 		if strings.Contains(URL, "actions/skip-replication-event") {
 			return true
 		}
-		if strings.Contains(URL, "actions/reset-master") {
+		if strings.Contains(URL, "actions/reset-main") {
 			return true
 		}
-		if strings.Contains(URL, "actions/reset-slave-all") {
+		if strings.Contains(URL, "actions/reset-subordinate-all") {
 			return true
 		}
 	}
@@ -445,10 +445,10 @@ func (cluster *Cluster) IsURLPassACL(strUser string, URL string) bool {
 		}
 	}
 	if cluster.APIUsers[strUser].Grants[config.GrantDBBackup] {
-		if strings.Contains(URL, "/actions/master-logical-backup") {
+		if strings.Contains(URL, "/actions/main-logical-backup") {
 			return true
 		}
-		if strings.Contains(URL, "/actions/master-physical-backup") {
+		if strings.Contains(URL, "/actions/main-physical-backup") {
 			return true
 		}
 	}

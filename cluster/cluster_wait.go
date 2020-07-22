@@ -136,26 +136,26 @@ func (cluster *Cluster) WaitClusterStop() error {
 	return nil
 }
 
-func (cluster *Cluster) WaitProxyEqualMaster() error {
+func (cluster *Cluster) WaitProxyEqualMain() error {
 	exitloop := 0
 	ticker := time.NewTicker(time.Millisecond * time.Duration(cluster.Conf.MonitoringTicker*1000))
-	cluster.LogPrintf(LvlInfo, "Waiting for proxy to join master")
+	cluster.LogPrintf(LvlInfo, "Waiting for proxy to join main")
 	for int64(exitloop) < cluster.Conf.MonitorWaitRetry {
 		select {
 		case <-ticker.C:
-			cluster.LogPrintf(LvlInfo, "Waiting for proxy to join master")
+			cluster.LogPrintf(LvlInfo, "Waiting for proxy to join main")
 			exitloop++
 			// All cluster down
-			if cluster.IsProxyEqualMaster() == true {
+			if cluster.IsProxyEqualMain() == true {
 				exitloop = 9999999
 			}
 		}
 	}
 	if exitloop == 9999999 {
-		cluster.LogPrintf(LvlInfo, "Proxy can join master")
+		cluster.LogPrintf(LvlInfo, "Proxy can join main")
 	} else {
-		cluster.LogPrintf(LvlErr, "Proxy to join master timeout")
-		return errors.New("Failed to join master via proxy")
+		cluster.LogPrintf(LvlErr, "Proxy to join main timeout")
+		return errors.New("Failed to join main via proxy")
 	}
 	return nil
 }
@@ -290,26 +290,26 @@ func (cluster *Cluster) WaitBootstrapDiscovery() error {
 	return nil
 }
 
-func (cluster *Cluster) waitMasterDiscovery() error {
-	cluster.LogPrintf(LvlInfo, "Waiting Master Found")
+func (cluster *Cluster) waitMainDiscovery() error {
+	cluster.LogPrintf(LvlInfo, "Waiting Main Found")
 	exitloop := 0
 	ticker := time.NewTicker(time.Millisecond * time.Duration(cluster.Conf.MonitoringTicker*1000))
 	for int64(exitloop) < cluster.Conf.MonitorWaitRetry {
 		select {
 		case <-ticker.C:
-			cluster.LogPrintf(LvlInfo, "Waiting Master Found")
+			cluster.LogPrintf(LvlInfo, "Waiting Main Found")
 			exitloop++
-			if cluster.GetMaster() != nil {
+			if cluster.GetMain() != nil {
 				exitloop = 9999999
 			}
 
 		}
 	}
 	if exitloop == 9999999 {
-		cluster.LogPrintf(LvlInfo, "Master founded")
+		cluster.LogPrintf(LvlInfo, "Main founded")
 	} else {
-		cluster.LogPrintf(LvlErr, "Master found timeout")
-		return errors.New("Failed Master search timeout")
+		cluster.LogPrintf(LvlErr, "Main found timeout")
+		return errors.New("Failed Main search timeout")
 	}
 	return nil
 }

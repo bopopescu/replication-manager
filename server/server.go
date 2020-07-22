@@ -131,7 +131,7 @@ type Heartbeat struct {
 	UUID    string `json:"uuid"`
 	Secret  string `json:"secret"`
 	Cluster string `json:"cluster"`
-	Master  string `json:"master"`
+	Main  string `json:"main"`
 	UID     int    `json:"id"`
 	Status  string `json:"status"`
 	Hosts   int    `json:"hosts"`
@@ -360,7 +360,7 @@ func (repman *ReplicationManager) InitConfig(conf config.Config) {
 func (repman *ReplicationManager) initAlias(v *viper.Viper) {
 	v.RegisterAlias("monitoring-config-rewrite", "monitoring-save-config")
 	v.RegisterAlias("api-user", "api-credentials")
-	v.RegisterAlias("replication-master-connection", "replication-source-name")
+	v.RegisterAlias("replication-main-connection", "replication-source-name")
 	v.RegisterAlias("logfile", "log-file")
 	v.RegisterAlias("wait-kill", "switchover-wait-kill")
 	v.RegisterAlias("user", "db-servers-credential")
@@ -370,16 +370,16 @@ func (repman *ReplicationManager) initAlias(v *viper.Viper) {
 	v.RegisterAlias("hosts-tls-client-cert", "db-servers-tls-client-cert")
 	v.RegisterAlias("connect-timeout", "db-servers-connect-timeout")
 	v.RegisterAlias("rpluser", "replication-credential")
-	v.RegisterAlias("prefmaster", "db-servers-prefered-master")
+	v.RegisterAlias("prefmain", "db-servers-prefered-main")
 	v.RegisterAlias("ignore-servers", "db-servers-ignored-hosts")
-	v.RegisterAlias("master-connection", "replication-master-connection")
-	v.RegisterAlias("master-connect-retry", "replication-master-connection-retry")
+	v.RegisterAlias("main-connection", "replication-main-connection")
+	v.RegisterAlias("main-connect-retry", "replication-main-connection-retry")
 	v.RegisterAlias("api-user", "api-credential")
 	v.RegisterAlias("readonly", "failover-readonly-state")
 	v.RegisterAlias("maxscale-host", "maxscale-servers")
 	v.RegisterAlias("mdbshardproxy-hosts", "mdbshardproxy-servers")
-	v.RegisterAlias("multimaster", "replication-multi-master")
-	v.RegisterAlias("multi-tier-slave", "replication-multi-tier-slave")
+	v.RegisterAlias("multimain", "replication-multi-main")
+	v.RegisterAlias("multi-tier-subordinate", "replication-multi-tier-subordinate")
 	v.RegisterAlias("pre-failover-script", "failover-pre-script")
 	v.RegisterAlias("post-failover-script", "failover-post-script")
 	v.RegisterAlias("rejoin-script", "autorejoin-script")
@@ -390,7 +390,7 @@ func (repman *ReplicationManager) initAlias(v *viper.Viper) {
 	v.RegisterAlias("wait-write-query", "switchover-wait-write-query")
 	v.RegisterAlias("wait-trx", "switchover-wait-trx")
 	v.RegisterAlias("gtidcheck", "switchover-at-equal-gtid")
-	v.RegisterAlias("maxdelay", "failover-max-slave-delay")
+	v.RegisterAlias("maxdelay", "failover-max-subordinate-delay")
 	v.RegisterAlias("maxscale-host", "maxscale-servers")
 	v.RegisterAlias("maxscale-pass", "maxscale-password")
 }

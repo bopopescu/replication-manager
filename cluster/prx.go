@@ -348,7 +348,7 @@ func (cluster *Cluster) newProxy(p *Proxy) (*Proxy, error) {
 func (cluster *Cluster) InjectProxiesTraffic() {
 	var definer string
 	// Found server from ServerId
-	if cluster.GetMaster() != nil {
+	if cluster.GetMain() != nil {
 		for _, pr := range cluster.Proxies {
 			if pr.Type == config.ConstProxySphinx || pr.Type == config.ConstProxyMyProxy {
 				// Does not yet understand CREATE OR REPLACE VIEW
@@ -376,9 +376,9 @@ func (cluster *Cluster) InjectProxiesTraffic() {
 	}
 }
 
-func (cluster *Cluster) IsProxyEqualMaster() bool {
+func (cluster *Cluster) IsProxyEqualMain() bool {
 	// Found server from ServerId
-	if cluster.GetMaster() != nil {
+	if cluster.GetMain() != nil {
 		for _, pr := range cluster.Proxies {
 			db, err := cluster.GetClusterThisProxyConn(pr)
 			if err != nil {
@@ -389,7 +389,7 @@ func (cluster *Cluster) IsProxyEqualMaster() bool {
 			}
 			defer db.Close()
 			var sv map[string]string
-			sv, _, err = dbhelper.GetVariables(db, cluster.GetMaster().DBVersion)
+			sv, _, err = dbhelper.GetVariables(db, cluster.GetMain().DBVersion)
 			if err != nil {
 				if cluster.IsVerbose() {
 					cluster.LogPrintf(LvlErr, "Can't get variables: %s", err)
@@ -405,9 +405,9 @@ func (cluster *Cluster) IsProxyEqualMaster() bool {
 				return false
 			}
 			if cluster.IsVerbose() {
-				cluster.LogPrintf(LvlInfo, "Proxy compare master: %d %d", cluster.GetMaster().ServerID, uint(sid))
+				cluster.LogPrintf(LvlInfo, "Proxy compare main: %d %d", cluster.GetMain().ServerID, uint(sid))
 			}
-			if cluster.GetMaster().ServerID == uint64(sid) || pr.Type == config.ConstProxySpider {
+			if cluster.GetMain().ServerID == uint64(sid) || pr.Type == config.ConstProxySpider {
 				return true
 			}
 		}
@@ -424,12 +424,12 @@ func (cluster *Cluster) SetProxyServerMaintenance(serverid uint64) {
 		if cluster.Conf.MxsOn && pr.Type == config.ConstProxyMaxscale {
 			//intsrvid, _ := strconv.Atoi(serverid)
 			server := cluster.GetServerFromId(serverid)
-			if cluster.GetMaster() != nil {
+			if cluster.GetMain() != nil {
 				cluster.setMaintenanceMaxscale(pr, server)
 			}
 		}
 		if cluster.Conf.ProxysqlOn && pr.Type == config.ConstProxySqlproxy {
-			if cluster.GetMaster() != nil {
+			if cluster.GetMain() != nil {
 				server := cluster.GetServerFromId(serverid)
 				cluster.setMaintenanceProxysql(pr, server)
 			}

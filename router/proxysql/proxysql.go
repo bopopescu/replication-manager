@@ -156,9 +156,9 @@ func (psql *ProxySQL) Truncate() error {
 	return err
 }
 
-func (psql *ProxySQL) ReplaceWriter(host string, port string, oldhost string, oldport string, masterasreader bool) error {
+func (psql *ProxySQL) ReplaceWriter(host string, port string, oldhost string, oldport string, mainasreader bool) error {
 
-	if masterasreader {
+	if mainasreader {
 		err := psql.DeleteAllWriters()
 		if err != nil {
 			return err

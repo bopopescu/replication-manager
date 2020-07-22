@@ -42,8 +42,8 @@ type River struct {
 	flushmutex            *sync.Mutex
 	run_uuid              string
 	bufdestsql            []string
-	// slaveconn             *client.Conn
-	slavepool *sql.DB
+	// subordinateconn             *client.Conn
+	subordinatepool *sql.DB
 	syncCh    chan interface{}
 	ctx       context.Context
 }
@@ -66,19 +66,19 @@ func NewRiver(c *Config) (*River, error) {
 
 	var err error
 
-	var dsn = r.c.SlaveUser + ":" + r.c.SlavePassword + "@tcp(" + r.c.SlaveHost + ")/"
-	r.slavepool, err = sql.Open("mysql", dsn) // this does not really open a new connection
+	var dsn = r.c.SubordinateUser + ":" + r.c.SubordinatePassword + "@tcp(" + r.c.SubordinateHost + ")/"
+	r.subordinatepool, err = sql.Open("mysql", dsn) // this does not really open a new connection
 
 	if err != nil {
-		log.Fatalf("Error on initializing slave database connection: %s", err.Error())
+		log.Fatalf("Error on initializing subordinate database connection: %s", err.Error())
 	}
-	r.slavepool.SetMaxOpenConns(4)
-	r.slavepool.SetMaxIdleConns(1)
+	r.subordinatepool.SetMaxOpenConns(4)
+	r.subordinatepool.SetMaxIdleConns(1)
 
-	//  defer r.slavepool.Close()
+	//  defer r.subordinatepool.Close()
 
 	if r.c.DumpInit {
-		err = os.Remove(r.c.DumpPath + "/master.info")
+		err = os.Remove(r.c.DumpPath + "/main.info")
 	}
 
 	if err = r.newCanal(); err != nil {
@@ -114,7 +114,7 @@ func (r *River) newCanal() error {
 	cfg.ServerID = r.c.DumpServerID
 	cfg.Dump.ExecutionPath = r.c.DumpExec
 	cfg.Dump.DiscardErr = false
-	cfg.Dump.SkipMasterData = false
+	cfg.Dump.SkipMainData = false
 
 	//	cfg. StatAddr = "127.0.0.1:12800"
 
@@ -363,7 +363,7 @@ func (r *River) Run() error {
 
 		}
 	}()
-	/*	if len(r.canal.master.Name) > 0 && r.canal.master.Position > 0 {
+	/*	if len(r.canal.main.Name) > 0 && r.canal.main.Position > 0 {
 		fmt.Println("=you wan't to skip dump")
 	}*/
 
@@ -484,7 +484,7 @@ func (r *River) ExecuteDest(cmd string, args ...interface{}) (rr *sql.Rows, err 
 	retryNum := 3
 	//return
 	for i := 0; i < retryNum; i++ {
-		_, err = r.slavepool.Exec(cmd)
+		_, err = r.subordinatepool.Exec(cmd)
 		if err != nil {
 			log.Fatal(err)
 
@@ -506,15 +506,15 @@ func (r *River) ExecuteDest(cmd string, args ...interface{}) (rr *mysql.Result, 
 
 
 	for i := 0; i < retryNum; i++ {
-		if r.slaveconn == nil {
-			r.slaveconn, err = client.Connect(r.c.SlaveHost, r.c.SlaveUser, r.c.SlavePassword, "")
+		if r.subordinateconn == nil {
+			r.subordinateconn, err = client.Connect(r.c.SubordinateHost, r.c.SubordinateUser, r.c.SubordinatePassword, "")
 			if err != nil {
 				log.Errorf("%s", err.Error())
 				return nil, errors.Trace(err)
 			}
 		}
 		//log.Errorf("%s", cmd)
-		rr, err = r.slaveconn.Execute(cmd, args...)
+		rr, err = r.subordinateconn.Execute(cmd, args...)
 		if err != nil && err != mysql.ErrBadConn {
 			if len(cmd) > 199 {
 				log.Errorf("%s %s", err.Error(), cmd[:200])
@@ -526,8 +526,8 @@ func (r *River) ExecuteDest(cmd string, args ...interface{}) (rr *mysql.Result, 
 			continue
 		} else if err == mysql.ErrBadConn {
 			log.Errorf("%s", err.Error())
-			r.slaveconn.Close()
-			r.slaveconn = nil
+			r.subordinateconn.Close()
+			r.subordinateconn = nil
 			continue
 		} else {
 
@@ -548,6 +548,6 @@ func (r *River) Close() {
 	r.canal.Close()
 
 	r.wg.Wait()
-	//r.slaveconn.Close()
-	//r.slaveconn = nil
+	//r.subordinateconn.Close()
+	//r.subordinateconn = nil
 }

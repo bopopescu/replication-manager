@@ -27,7 +27,7 @@ func (server *ServerMonitor) IsInDelayedHost() bool {
 	return false
 }
 
-func (server *ServerMonitor) IsSlaveOfReplicationSource(name string) bool {
+func (server *ServerMonitor) IsSubordinateOfReplicationSource(name string) bool {
 	if server.Replications != nil {
 		for _, ss := range server.Replications {
 			if ss.ConnectionName.String == name {
@@ -104,7 +104,7 @@ func (server *ServerMonitor) HasBinlogCompress() bool {
 	return server.Variables["LOG_BIN_COMPRESS"] == "ON"
 }
 
-func (server *ServerMonitor) HasBinlogSlaveUpdates() bool {
+func (server *ServerMonitor) HasBinlogSubordinateUpdates() bool {
 	return server.Variables["LOG_SLAVE_UPDATES"] == "ON"
 }
 
@@ -116,7 +116,7 @@ func (server *ServerMonitor) HasBinlogRowAnnotate() bool {
 	return server.Variables["BINLOG_ANNOTATE_ROW_EVENTS"] == "ON"
 }
 
-func (server *ServerMonitor) HasBinlogSlowSlaveQueries() bool {
+func (server *ServerMonitor) HasBinlogSlowSubordinateQueries() bool {
 	return server.Variables["LOG_SLOW_SLAVE_STATEMENTS"] == "ON"
 }
 
@@ -189,18 +189,18 @@ func (server *ServerMonitor) HasInstallPlugin(name string) bool {
 	return false
 }
 
-// check if node see same master as the passed list
+// check if node see same main as the passed list
 func (server *ServerMonitor) HasSiblings(sib []*ServerMonitor) bool {
 	for _, sl := range sib {
-		sssib, err := sl.GetSlaveStatus(sl.ReplicationSourceName)
+		sssib, err := sl.GetSubordinateStatus(sl.ReplicationSourceName)
 		if err != nil {
 			return false
 		}
-		ssserver, err := server.GetSlaveStatus(server.ReplicationSourceName)
+		ssserver, err := server.GetSubordinateStatus(server.ReplicationSourceName)
 		if err != nil {
 			return false
 		}
-		if sssib.MasterServerID != ssserver.MasterServerID {
+		if sssib.MainServerID != ssserver.MainServerID {
 			return false
 		}
 	}
@@ -208,31 +208,31 @@ func (server *ServerMonitor) HasSiblings(sib []*ServerMonitor) bool {
 }
 
 func (server *ServerMonitor) HasReplicationSQLThreadRunning() bool {
-	ss, err := server.GetSlaveStatus(server.ReplicationSourceName)
+	ss, err := server.GetSubordinateStatus(server.ReplicationSourceName)
 	if err != nil {
 		return false
 	}
-	return ss.SlaveSQLRunning.String == "yes"
+	return ss.SubordinateSQLRunning.String == "yes"
 }
 
 func (server *ServerMonitor) HasReplicationIOThreadRunning() bool {
-	ss, err := server.GetSlaveStatus(server.ReplicationSourceName)
+	ss, err := server.GetSubordinateStatus(server.ReplicationSourceName)
 	if err != nil {
 		return false
 	}
-	return ss.SlaveIORunning.String == "yes"
+	return ss.SubordinateIORunning.String == "yes"
 }
 
-func (sl serverList) HasAllSlavesRunning() bool {
+func (sl serverList) HasAllSubordinatesRunning() bool {
 	if len(sl) == 0 {
 		return false
 	}
 	for _, s := range sl {
-		ss, sserr := s.GetSlaveStatus(s.ReplicationSourceName)
+		ss, sserr := s.GetSubordinateStatus(s.ReplicationSourceName)
 		if sserr != nil {
 			return false
 		}
-		if ss.SlaveSQLRunning.String != "Yes" || ss.SlaveIORunning.String != "Yes" {
+		if ss.SubordinateSQLRunning.String != "Yes" || ss.SubordinateIORunning.String != "Yes" {
 			return false
 		}
 	}
@@ -256,11 +256,11 @@ func (server *ServerMonitor) IsAcid() bool {
 	return false
 }
 
-func (server *ServerMonitor) HasSlaves(sib []*ServerMonitor) bool {
+func (server *ServerMonitor) HasSubordinates(sib []*ServerMonitor) bool {
 	for _, sl := range sib {
-		sssib, err := sl.GetSlaveStatus(sl.ReplicationSourceName)
+		sssib, err := sl.GetSubordinateStatus(sl.ReplicationSourceName)
 		if err == nil {
-			if server.ServerID == sssib.MasterServerID && sl.ServerID != server.ServerID {
+			if server.ServerID == sssib.MainServerID && sl.ServerID != server.ServerID {
 				return true
 			}
 		}
@@ -269,17 +269,17 @@ func (server *ServerMonitor) HasSlaves(sib []*ServerMonitor) bool {
 }
 
 func (server *ServerMonitor) HasCycling() bool {
-	currentSlave := server
+	currentSubordinate := server
 	searchServerID := server.ServerID
 
 	for range server.ClusterGroup.Servers {
-		currentMaster, _ := server.ClusterGroup.GetMasterFromReplication(currentSlave)
-		if currentMaster != nil {
-			//	server.ClusterGroup.LogPrintf("INFO", "Cycling my current master id :%d me id:%d", currentMaster.ServerID, currentSlave.ServerID)
-			if currentMaster.ServerID == searchServerID {
+		currentMain, _ := server.ClusterGroup.GetMainFromReplication(currentSubordinate)
+		if currentMain != nil {
+			//	server.ClusterGroup.LogPrintf("INFO", "Cycling my current main id :%d me id:%d", currentMain.ServerID, currentSubordinate.ServerID)
+			if currentMain.ServerID == searchServerID {
 				return true
 			} else {
-				currentSlave = currentMaster
+				currentSubordinate = currentMain
 			}
 		} else {
 			return false
@@ -343,7 +343,7 @@ func (server *ServerMonitor) HasGTIDReplication() bool {
 
 func (server *ServerMonitor) HasReplicationIssue() bool {
 	ret := server.CheckReplication()
-	if ret == "Running OK" || ((ret == "NOT OK, IO Connecting" || server.IsIOThreadRunning() == false) && server.ClusterGroup.GetMaster() == nil) {
+	if ret == "Running OK" || ((ret == "NOT OK, IO Connecting" || server.IsIOThreadRunning() == false) && server.ClusterGroup.GetMain() == nil) {
 		return false
 	}
 	return true
@@ -362,22 +362,22 @@ func (server *ServerMonitor) IsReadWrite() bool {
 }
 
 func (server *ServerMonitor) IsIOThreadRunning() bool {
-	ss, sserr := server.GetSlaveStatus(server.ReplicationSourceName)
+	ss, sserr := server.GetSubordinateStatus(server.ReplicationSourceName)
 	if sserr != nil {
 		return false
 	}
-	if ss.SlaveIORunning.String == "Yes" {
+	if ss.SubordinateIORunning.String == "Yes" {
 		return true
 	}
 	return false
 }
 
 func (server *ServerMonitor) IsSQLThreadRunning() bool {
-	ss, sserr := server.GetSlaveStatus(server.ReplicationSourceName)
+	ss, sserr := server.GetSubordinateStatus(server.ReplicationSourceName)
 	if sserr != nil {
 		return false
 	}
-	if ss.SlaveSQLRunning.String == "Yes" {
+	if ss.SubordinateSQLRunning.String == "Yes" {
 		return true
 	}
 	return false
@@ -387,12 +387,12 @@ func (server *ServerMonitor) IsPrefered() bool {
 	return server.Prefered
 }
 
-func (server *ServerMonitor) IsMaster() bool {
-	master := server.ClusterGroup.GetMaster()
-	if master == nil {
+func (server *ServerMonitor) IsMain() bool {
+	main := server.ClusterGroup.GetMain()
+	if main == nil {
 		return false
 	}
-	if master.Id == server.Id {
+	if main.Id == server.Id {
 		return true
 	}
 	return false

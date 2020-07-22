@@ -49,7 +49,7 @@ var (
 	cliTlog                      s18log.TermLog
 	cliTermlength                int
 	cliServers                   []cluster.ServerMonitor
-	cliMaster                    cluster.ServerMonitor
+	cliMain                    cluster.ServerMonitor
 	cliSettings                  cluster.Cluster
 	cliMonitor                   server.ReplicationManager
 	cliUrl                       string
@@ -65,7 +65,7 @@ var (
 	cliBootstrapCleanall         bool
 	cliBootstrapWithProvisioning bool
 	cliExit                      bool
-	cliPrefMaster                string
+	cliPrefMain                string
 	cliStatusErrors              bool
 	cliServerID                  string
 	cliServerMaintenance         bool
@@ -192,7 +192,7 @@ func init() {
 
 	apiCmd.Flags().StringVar(&cliUrl, "url", "https://127.0.0.1:10005/api/clusters", "Url to rest API")
 
-	switchoverCmd.Flags().StringVar(&cliPrefMaster, "db-servers-prefered-master", "", "Database preferred candidate in election,  host:[port] format")
+	switchoverCmd.Flags().StringVar(&cliPrefMain, "db-servers-prefered-main", "", "Database preferred candidate in election,  host:[port] format")
 
 	testCmd.Flags().StringVar(&cliTTestRun, "run-tests", "", "tests list to be run ")
 	testCmd.Flags().StringVar(&cliTestResultDBServer, "result-db-server", "", "MariaDB MySQL host to store result")
@@ -204,13 +204,13 @@ func init() {
 
 	testCmd.Flags().StringVar(&cliTestConvertFile, "file", "", "test result.json")
 
-	bootstrapCmd.Flags().StringVar(&cliBootstrapTopology, "topology", "master-slave", "master-slave|master-slave-no-gtid|maxscale-binlog|multi-master|multi-tier-slave|multi-master-ring,multi-master-wsrep")
-	bootstrapCmd.Flags().BoolVar(&cliBootstrapCleanall, "clean-all", false, "Reset all slaves and binary logs before bootstrapping")
+	bootstrapCmd.Flags().StringVar(&cliBootstrapTopology, "topology", "main-subordinate", "main-subordinate|main-subordinate-no-gtid|maxscale-binlog|multi-main|multi-tier-subordinate|multi-main-ring,multi-main-wsrep")
+	bootstrapCmd.Flags().BoolVar(&cliBootstrapCleanall, "clean-all", false, "Reset all subordinates and binary logs before bootstrapping")
 	bootstrapCmd.Flags().BoolVar(&cliBootstrapWithProvisioning, "with-provisioning", false, "Provision the culster for replication-manager-tst or Provision the culster for replication-manager-pro")
 
 	statusCmd.Flags().BoolVar(&cliStatusErrors, "with-errors", false, "Add json errors reporting")
 
-	showCmd.Flags().StringVar(&cliShowObjects, "get", "settings,clusters,servers,master,slaves,crashes,alerts", "get the following objects")
+	showCmd.Flags().StringVar(&cliShowObjects, "get", "settings,clusters,servers,main,subordinates,crashes,alerts", "get the following objects")
 
 }
 
@@ -342,8 +342,8 @@ var statusCmd = &cobra.Command{
 
 var failoverCmd = &cobra.Command{
 	Use:   "failover",
-	Short: "Failover a dead master",
-	Long:  `Trigger failover on a dead master by promoting a slave.`,
+	Short: "Failover a dead main",
+	Long:  `Trigger failover on a dead main by promoting a subordinate.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		var slogs []string
 		cliInit(true)
@@ -361,20 +361,20 @@ var failoverCmd = &cobra.Command{
 
 var switchoverCmd = &cobra.Command{
 	Use:   "switchover",
-	Short: "Perform a master switch",
-	Long: `Performs an online master switch by promoting a slave to master
-and demoting the old master to slave`,
+	Short: "Perform a main switch",
+	Long: `Performs an online main switch by promoting a subordinate to main
+and demoting the old main to subordinate`,
 	Run: func(cmd *cobra.Command, args []string) {
 		var slogs []string
-		var prefMasterParam RequetParam
+		var prefMainParam RequetParam
 		var params []RequetParam
 
 		cliInit(true)
 		cliGetTopology()
-		if cliPrefMaster != "" {
-			prefMasterParam.key = "prefmaster"
-			prefMasterParam.value = cliPrefMaster
-			params = append(params, prefMasterParam)
+		if cliPrefMain != "" {
+			prefMainParam.key = "prefmain"
+			prefMainParam.value = cliPrefMain
+			params = append(params, prefMainParam)
 			cliClusterCmd("actions/switchover", params)
 		} else {
 			cliClusterCmd("actions/switchover", nil)
@@ -411,7 +411,7 @@ var apiCmd = &cobra.Command{
 var topologyCmd = &cobra.Command{
 	Use:   "topology",
 	Short: "Print replication topology",
-	Long:  `Print the replication topology by detecting master and slaves`,
+	Long:  `Print the replication topology by detecting main and subordinates`,
 	Run: func(cmd *cobra.Command, args []string) {
 		cliInit(true)
 		cliGetTopology()
@@ -543,8 +543,8 @@ var showCmd = &cobra.Command{
 			Name     string
 			Settings server.Settings         `json:"settings"`
 			Servers  []cluster.ServerMonitor `json:"servers"`
-			Master   cluster.ServerMonitor   `json:"master"`
-			Slaves   []cluster.ServerMonitor `json:"slaves"`
+			Main   cluster.ServerMonitor   `json:"main"`
+			Subordinates   []cluster.ServerMonitor `json:"subordinates"`
 			Crashes  []cluster.Crash         `json:"crashes"`
 			Alerts   cluster.Alerts          `json:"alerts"`
 		}
@@ -572,18 +572,18 @@ var showCmd = &cobra.Command{
 					json.Unmarshal([]byte(res), &myObjects.Servers)
 				}
 			}
-			if strings.Contains(cliShowObjects, "master") {
-				urlpost = "https://" + cliHost + ":" + cliPort + "/api/clusters/" + cluster + "/topology/master"
+			if strings.Contains(cliShowObjects, "main") {
+				urlpost = "https://" + cliHost + ":" + cliPort + "/api/clusters/" + cluster + "/topology/main"
 				res, err := cliAPICmd(urlpost, nil)
 				if err == nil {
-					json.Unmarshal([]byte(res), &myObjects.Master)
+					json.Unmarshal([]byte(res), &myObjects.Main)
 				}
 			}
-			if strings.Contains(cliShowObjects, "slaves") {
-				urlpost = "https://" + cliHost + ":" + cliPort + "/api/clusters/" + cluster + "/topology/master"
+			if strings.Contains(cliShowObjects, "subordinates") {
+				urlpost = "https://" + cliHost + ":" + cliPort + "/api/clusters/" + cluster + "/topology/main"
 				res, err := cliAPICmd(urlpost, nil)
 				if err == nil {
-					json.Unmarshal([]byte(res), &myObjects.Slaves)
+					json.Unmarshal([]byte(res), &myObjects.Subordinates)
 				}
 			}
 			if strings.Contains(cliShowObjects, "crashes") {
@@ -643,7 +643,7 @@ var clientCmd = &cobra.Command{
 			case <-ticker.C:
 				cliSettings, _ = cliGetSettings()
 				cliServers, _ = cliGetServers()
-				cliMaster, _ = cliGetMaster()
+				cliMain, _ = cliGetMain()
 				dlogs, _ := cliGetLogs()
 				cliTlog = s18log.NewTermLog(loglen)
 				cliAddTlog(dlogs)
@@ -674,7 +674,7 @@ var clientCmd = &cobra.Command{
 						}
 					}
 					if event.Key == termbox.KeyCtrlF {
-						if cliMaster.State == "Failed" {
+						if cliMain.State == "Failed" {
 							cliClusterCmd("actions/failover", nil)
 						}
 					}
@@ -794,23 +794,23 @@ func cliGetTopology() {
 		headstr += " |  Mode: Manual "
 	}
 
-	headstr += fmt.Sprintf("\n%19s %15s %6s %15s %10s %12s %20s %20s %30s %6s %3s", "Id", "Host", "Port", "Status", "Failures", "Using GTID", "Current GTID", "Slave GTID", "Replication Health", "Delay", "RO")
+	headstr += fmt.Sprintf("\n%19s %15s %6s %15s %10s %12s %20s %20s %30s %6s %3s", "Id", "Host", "Port", "Status", "Failures", "Using GTID", "Current GTID", "Subordinate GTID", "Replication Health", "Delay", "RO")
 
 	for _, server := range cliServers {
 		var gtidCurr string
-		var gtidSlave string
+		var gtidSubordinate string
 		if server.CurrentGtid != nil {
 			gtidCurr = server.CurrentGtid.Sprint()
 		} else {
 			gtidCurr = ""
 		}
-		if server.SlaveGtid != nil {
-			gtidSlave = server.SlaveGtid.Sprint()
+		if server.SubordinateGtid != nil {
+			gtidSubordinate = server.SubordinateGtid.Sprint()
 		} else {
-			gtidSlave = ""
+			gtidSubordinate = ""
 		}
 
-		headstr += fmt.Sprintf("\n%19s %15s %6s %15s %10d %12s %20s %20s %30s %6d %3s", server.Id, server.Host, server.Port, server.State, server.FailCount, server.GetReplicationUsingGtid(), gtidCurr, gtidSlave, "", server.GetReplicationDelay(), server.ReadOnly)
+		headstr += fmt.Sprintf("\n%19s %15s %6s %15s %10d %12s %20s %20s %30s %6d %3s", server.Id, server.Host, server.Port, server.State, server.FailCount, server.GetReplicationUsingGtid(), gtidCurr, gtidSubordinate, "", server.GetReplicationDelay(), server.ReadOnly)
 
 	}
 	fmt.Printf(headstr)
@@ -832,25 +832,25 @@ func cliDisplay() {
 	}
 	cliPrintfTb(0, 0, termbox.ColorWhite, termbox.ColorBlack|termbox.AttrReverse|termbox.AttrBold, headstr)
 	cliPrintfTb(0, 1, termbox.ColorRed, termbox.ColorBlack|termbox.AttrReverse|termbox.AttrBold, cliConfirm)
-	cliPrintfTb(0, 2, termbox.ColorWhite|termbox.AttrBold, termbox.ColorBlack, "%1s%15s %6s %15s %10s %12s %20s %20s %30s %6s %3s", " ", "Host", "Port", "Status", "Failures", "Using GTID", "Current GTID", "Slave GTID", "Replication Health", "Delay", "RO")
+	cliPrintfTb(0, 2, termbox.ColorWhite|termbox.AttrBold, termbox.ColorBlack, "%1s%15s %6s %15s %10s %12s %20s %20s %30s %6s %3s", " ", "Host", "Port", "Status", "Failures", "Using GTID", "Current GTID", "Subordinate GTID", "Replication Health", "Delay", "RO")
 	cliTlog.Line = 3
 	for i, server := range cliServers {
 		var gtidCurr string
-		var gtidSlave string
+		var gtidSubordinate string
 		if server.CurrentGtid != nil {
 			gtidCurr = server.CurrentGtid.Sprint()
 		} else {
 			gtidCurr = ""
 		}
-		if server.SlaveGtid != nil {
-			gtidSlave = server.SlaveGtid.Sprint()
+		if server.SubordinateGtid != nil {
+			gtidSubordinate = server.SubordinateGtid.Sprint()
 		} else {
-			gtidSlave = ""
+			gtidSubordinate = ""
 		}
 
 		var fgCol termbox.Attribute
 		switch server.State {
-		case "Master":
+		case "Main":
 			fgCol = termbox.ColorGreen
 		case "Failed":
 			fgCol = termbox.ColorRed
@@ -858,26 +858,26 @@ func cliDisplay() {
 			fgCol = termbox.ColorBlue
 		case "Suspect":
 			fgCol = termbox.ColorMagenta
-		case "SlaveErr":
+		case "SubordinateErr":
 			fgCol = termbox.ColorMagenta
-		case "SlaveLate":
+		case "SubordinateLate":
 			fgCol = termbox.ColorYellow
 		default:
 			fgCol = termbox.ColorWhite
 		}
 		mystatus := server.State
-		if server.IsVirtualMaster {
+		if server.IsVirtualMain {
 			mystatus = mystatus + "*VM"
 		}
 		myServerPointer := " "
 		if i == cliConsoleServerIndex {
 			myServerPointer = ">"
 		}
-		cliPrintfTb(1, cliTlog.Line, fgCol, termbox.ColorBlack, "%1s%15s %6s %15s %10d %12s %20s %20s %30s %6d %3s", myServerPointer, server.Host, server.Port, mystatus, server.FailCount, server.GetReplicationUsingGtid(), gtidCurr, gtidSlave, server.ReplicationHealth, server.GetReplicationDelay(), server.ReadOnly)
+		cliPrintfTb(1, cliTlog.Line, fgCol, termbox.ColorBlack, "%1s%15s %6s %15s %10d %12s %20s %20s %30s %6d %3s", myServerPointer, server.Host, server.Port, mystatus, server.FailCount, server.GetReplicationUsingGtid(), gtidCurr, gtidSubordinate, server.ReplicationHealth, server.GetReplicationDelay(), server.ReadOnly)
 		cliTlog.Line++
 	}
 	cliTlog.Line++
-	if cliMaster.State != "Failed" {
+	if cliMain.State != "Failed" {
 		cliPrintTb(0, cliTlog.Line, termbox.ColorWhite, termbox.ColorBlack, " Ctrl-Q to quit, Ctrl-S to switchover, Ctrl-(N|P) to change Cluster,Ctrl-H to help")
 	} else {
 		cliPrintTb(0, cliTlog.Line, termbox.ColorWhite, termbox.ColorBlack, " Ctrl-Q to quit, Ctrl-F to failover, Ctrl-(N|P) to change Cluster,Ctrl-H to help")
@@ -917,7 +917,7 @@ func cliDisplayHelp() {
 	cliLogPrint("HELP : Ctrl-Q  Quit")
 	cliLogPrint("HELP : Ctrl-C  Quit")
 	cliLogPrint("HELP : Ctrl-I  Switch failover automatic/manual")
-	cliLogPrint("HELP : Ctrl-R  Switch slaves read-only/read-write")
+	cliLogPrint("HELP : Ctrl-R  Switch subordinates read-only/read-write")
 	cliLogPrint("HELP : Ctrl-V  Switch verbosity")
 	cliLogPrint("HELP : Ctrl-E  Erase failover control")
 
@@ -1117,9 +1117,9 @@ func cliGetServers() ([]cluster.ServerMonitor, error) {
 	return r, nil
 }
 
-func cliGetMaster() (cluster.ServerMonitor, error) {
+func cliGetMain() (cluster.ServerMonitor, error) {
 	var r cluster.ServerMonitor
-	urlpost := "https://" + cliHost + ":" + cliPort + "/api/clusters/" + cliClusters[cliClusterIndex] + "/topology/master"
+	urlpost := "https://" + cliHost + ":" + cliPort + "/api/clusters/" + cliClusters[cliClusterIndex] + "/topology/main"
 	var bearer = "Bearer " + cliToken
 	req, err := http.NewRequest("GET", urlpost, nil)
 	if err != nil {
@@ -1139,7 +1139,7 @@ func cliGetMaster() (cluster.ServerMonitor, error) {
 	}
 	err = json.Unmarshal(body, &r)
 	if err != nil {
-		log.Println("ERROR in getting master", err)
+		log.Println("ERROR in getting main", err)
 		return r, err
 	}
 	resp.Body.Close()

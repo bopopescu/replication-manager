@@ -85,40 +85,40 @@ type Config struct {
 	HostsTLSCA                                string `mapstructure:"db-servers-tls-ca-cert" toml:"db-servers-tls-ca-cert" json:"dbServersTlsCaCert"`
 	HostsTLSKEY                               string `mapstructure:"db-servers-tls-client-key" toml:"db-servers-tls-client-key" json:"dbServersTlsClientKey"`
 	HostsTLSCLI                               string `mapstructure:"db-servers-tls-client-cert" toml:"db-servers-tls-client-cert" json:"dbServersTlsClientCert"`
-	PrefMaster                                string `mapstructure:"db-servers-prefered-master" toml:"db-servers-prefered-master" json:"dbServersPreferedMaster"`
+	PrefMain                                string `mapstructure:"db-servers-prefered-main" toml:"db-servers-prefered-main" json:"dbServersPreferedMain"`
 	BackupServers                             string `mapstructure:"db-servers-backup-hosts" toml:"db-servers-backup-hosts" json:"dbServersBackupHosts"`
 	IgnoreSrv                                 string `mapstructure:"db-servers-ignored-hosts" toml:"db-servers-ignored-hosts" json:"dbServersIgnoredHosts"`
 	IgnoreSrvRO                               string `mapstructure:"db-servers-ignored-readonly" toml:"db-servers-ignored-readonly" json:"dbServersIgnoredReadonly"`
 	Timeout                                   int    `mapstructure:"db-servers-connect-timeout" toml:"db-servers-connect-timeout" json:"dbServersConnectTimeout"`
 	ReadTimeout                               int    `mapstructure:"db-servers-read-timeout" toml:"db-servers-read-timeout" json:"dbServersReadTimeout"`
 	DBServersLocality                         string `mapstructure:"db-servers-locality" toml:"db-servers-locality" json:"dbServersLocality"`
-	PRXServersReadOnMaster                    bool   `mapstructure:"proxy-servers-read-on-master" toml:"proxy-servers-read-on-master" json:"proxyServersReadOnMaster"`
+	PRXServersReadOnMain                    bool   `mapstructure:"proxy-servers-read-on-main" toml:"proxy-servers-read-on-main" json:"proxyServersReadOnMain"`
 	PRXServersBackendCompression              bool   `mapstructure:"proxy-servers-backend-compression" toml:"proxy-servers-backend-compression" json:"proxyServersBackendCompression"`
 	PRXServersBackendMaxReplicationLag        int    `mapstructure:"proxy-servers-backend-max-replication-lag" toml:"proxy-servers-backend--max-replication-lag" json:"proxyServersBackendMaxReplicationLag"`
 	PRXServersBackendMaxConnections           int    `mapstructure:"proxy-servers-backend-max-connections" toml:"proxy-servers-backend--max-connections" json:"proxyServersBackendMaxConnections"`
 	ClusterHead                               string `mapstructure:"cluster-head" toml:"cluster-head" json:"clusterHead"`
-	MasterConnectRetry                        int    `mapstructure:"replication-master-connect-retry" toml:"replication-master-connect-retry" json:"replicationMasterConnectRetry"`
+	MainConnectRetry                        int    `mapstructure:"replication-main-connect-retry" toml:"replication-main-connect-retry" json:"replicationMainConnectRetry"`
 	RplUser                                   string `mapstructure:"replication-credential" toml:"replication-credential" json:"replicationCredential"`
 	ReplicationErrorScript                    string `mapstructure:"replication-error-script" toml:"replication-error-script" json:"replicationErrorScript"`
-	MasterConn                                string `mapstructure:"replication-source-name" toml:"replication-source-name" json:"replicationSourceName"`
+	MainConn                                string `mapstructure:"replication-source-name" toml:"replication-source-name" json:"replicationSourceName"`
 	ReplicationSSL                            bool   `mapstructure:"replication-use-ssl" toml:"replication-use-ssl" json:"replicationUseSsl"`
-	MultiMasterRing                           bool   `mapstructure:"replication-multi-master-ring" toml:"replication-multi-master-ring" json:"replicationMultiMasterRing"`
-	MultiMasterWsrep                          bool   `mapstructure:"replication-multi-master-wsrep" toml:"replication-multi-master-wsrep" json:"replicationMultiMasterWsrep"`
-	MultiMasterWsrepSSTMethod                 string `mapstructure:"replication-multi-master-wsrep-sst-method" toml:"replication-multi-master-wsrep-sst-method" json:"replicationMultiMasterWsrepSSTMethod"`
-	MultiMaster                               bool   `mapstructure:"replication-multi-master" toml:"replication-multi-master" json:"replicationMultiMaster"`
-	MultiTierSlave                            bool   `mapstructure:"replication-multi-tier-slave" toml:"replication-multi-tier-slave" json:"replicationMultiTierSlave"`
-	MasterSlavePgStream                       bool   `mapstructure:"replication-master-slave-pg-stream" toml:"replication-master-slave-pg-stream" json:"replicationMasterSlavePgStream"`
-	MasterSlavePgLogical                      bool   `mapstructure:"replication-master-slave-pg-logical" toml:"replication-master-slave-pg-logical" json:"replicationMasterSlavePgLogical"`
-	ReplicationNoRelay                        bool   `mapstructure:"replication-master-slave-never-relay" toml:"replication-master-slave-never-relay" json:"replicationMasterSlaveNeverRelay"`
+	MultiMainRing                           bool   `mapstructure:"replication-multi-main-ring" toml:"replication-multi-main-ring" json:"replicationMultiMainRing"`
+	MultiMainWsrep                          bool   `mapstructure:"replication-multi-main-wsrep" toml:"replication-multi-main-wsrep" json:"replicationMultiMainWsrep"`
+	MultiMainWsrepSSTMethod                 string `mapstructure:"replication-multi-main-wsrep-sst-method" toml:"replication-multi-main-wsrep-sst-method" json:"replicationMultiMainWsrepSSTMethod"`
+	MultiMain                               bool   `mapstructure:"replication-multi-main" toml:"replication-multi-main" json:"replicationMultiMain"`
+	MultiTierSubordinate                            bool   `mapstructure:"replication-multi-tier-subordinate" toml:"replication-multi-tier-subordinate" json:"replicationMultiTierSubordinate"`
+	MainSubordinatePgStream                       bool   `mapstructure:"replication-main-subordinate-pg-stream" toml:"replication-main-subordinate-pg-stream" json:"replicationMainSubordinatePgStream"`
+	MainSubordinatePgLogical                      bool   `mapstructure:"replication-main-subordinate-pg-logical" toml:"replication-main-subordinate-pg-logical" json:"replicationMainSubordinatePgLogical"`
+	ReplicationNoRelay                        bool   `mapstructure:"replication-main-subordinate-never-relay" toml:"replication-main-subordinate-never-relay" json:"replicationMainSubordinateNeverRelay"`
 	ReplicationRestartOnSQLErrorMatch         string `mapstructure:"replication-restart-on-sqlerror-match" toml:"replication-restart-on-sqlerror-match" json:"eeplicationRestartOnSqlLErrorMatch"`
 	SwitchWaitKill                            int64  `mapstructure:"switchover-wait-kill" toml:"switchover-wait-kill" json:"switchoverWaitKill"`
 	SwitchWaitTrx                             int64  `mapstructure:"switchover-wait-trx" toml:"switchover-wait-trx" json:"switchoverWaitTrx"`
 	SwitchWaitWrite                           int    `mapstructure:"switchover-wait-write-query" toml:"switchover-wait-write-query" json:"switchoverWaitWriteQuery"`
 	SwitchGtidCheck                           bool   `mapstructure:"switchover-at-equal-gtid" toml:"switchover-at-equal-gtid" json:"switchoverAtEqualGtid"`
 	SwitchSync                                bool   `mapstructure:"switchover-at-sync" toml:"switchover-at-sync" json:"switchoverAtSync"`
-	SwitchMaxDelay                            int64  `mapstructure:"switchover-max-slave-delay" toml:"switchover-max-slave-delay" json:"switchoverMaxSlaveDelay"`
-	SwitchSlaveWaitCatch                      bool   `mapstructure:"switchover-slave-wait-catch" toml:"switchover-slave-wait-catch" json:"switchoverSlaveWaitCatch"`
-	SwitchSlaveWaitRouteChange                int    `mapstructure:"switchover-wait-route-change" toml:"switchover-wait-route-change" json:"switchoverWaitRouteChange"`
+	SwitchMaxDelay                            int64  `mapstructure:"switchover-max-subordinate-delay" toml:"switchover-max-subordinate-delay" json:"switchoverMaxSubordinateDelay"`
+	SwitchSubordinateWaitCatch                      bool   `mapstructure:"switchover-subordinate-wait-catch" toml:"switchover-subordinate-wait-catch" json:"switchoverSubordinateWaitCatch"`
+	SwitchSubordinateWaitRouteChange                int    `mapstructure:"switchover-wait-route-change" toml:"switchover-wait-route-change" json:"switchoverWaitRouteChange"`
 	SwitchDecreaseMaxConn                     bool   `mapstructure:"switchover-decrease-max-conn" toml:"switchover-decrease-max-conn" json:"switchoverDecreaseMaxConn"`
 	SwitchDecreaseMaxConnValue                int64  `mapstructure:"switchover-decrease-max-conn-value" toml:"switchover-decrease-max-conn-value" json:"switchoverDecreaseMaxConnValue"`
 	FailLimit                                 int    `mapstructure:"failover-limit" toml:"failover-limit" json:"failoverLimit"`
@@ -133,7 +133,7 @@ type Config struct {
 	FailRestartUnsafe                         bool   `mapstructure:"failover-restart-unsafe" toml:"failover-restart-unsafe" json:"failoverRestartUnsafe"`
 	FailResetTime                             int64  `mapstructure:"failcount-reset-time" toml:"failover-reset-time" json:"failoverResetTime"`
 	FailMode                                  string `mapstructure:"failover-mode" toml:"failover-mode" json:"failoverMode"`
-	FailMaxDelay                              int64  `mapstructure:"failover-max-slave-delay" toml:"failover-max-slave-delay" json:"failoverMaxSlaveDelay"`
+	FailMaxDelay                              int64  `mapstructure:"failover-max-subordinate-delay" toml:"failover-max-subordinate-delay" json:"failoverMaxSubordinateDelay"`
 	MaxFail                                   int    `mapstructure:"failover-falsepositive-ping-counter" toml:"failover-falsepositive-ping-counter" json:"failoverFalsePositivePingCounter"`
 	CheckFalsePositiveHeartbeat               bool   `mapstructure:"failover-falsepositive-heartbeat" toml:"failover-falsepositive-heartbeat" json:"failoverFalsePositiveHeartbeat"`
 	CheckFalsePositiveMaxscale                bool   `mapstructure:"failover-falsepositive-maxscale" toml:"failover-falsepositive-maxscale" json:"failoverFalsePositiveMaxscale"`
@@ -153,20 +153,20 @@ type Config struct {
 	AutorejoinBackupBinlog                    bool   `mapstructure:"autorejoin-backup-binlog" toml:"autorejoin-backup-binlog" json:"autorejoinBackupBinlog"`
 	AutorejoinSemisync                        bool   `mapstructure:"autorejoin-flashback-on-sync" toml:"autorejoin-flashback-on-sync" json:"autorejoinFlashbackOnSync"`
 	AutorejoinNoSemisync                      bool   `mapstructure:"autorejoin-flashback-on-unsync" toml:"autorejoin-flashback-on-unsync" json:"autorejoinFlashbackOnUnsync"`
-	AutorejoinSlavePositionalHeartbeat        bool   `mapstructure:"autorejoin-slave-positional-heartbeat" toml:"autorejoin-slave-positional-heartbeat" json:"autorejoinSlavePositionalHeartbeat"`
+	AutorejoinSubordinatePositionalHeartbeat        bool   `mapstructure:"autorejoin-subordinate-positional-heartbeat" toml:"autorejoin-subordinate-positional-heartbeat" json:"autorejoinSubordinatePositionalHeartbeat"`
 	CheckType                                 string `mapstructure:"check-type" toml:"check-type" json:"checkType"`
 	CheckReplFilter                           bool   `mapstructure:"check-replication-filters" toml:"check-replication-filters" json:"checkReplicationFilters"`
 	CheckBinFilter                            bool   `mapstructure:"check-binlog-filters" toml:"check-binlog-filters" json:"checkBinlogFilters"`
 	CheckGrants                               bool   `mapstructure:"check-grants" toml:"check-grants" json:"checkGrants"`
 	RplChecks                                 bool   `mapstructure:"check-replication-state" toml:"check-replication-state" json:"checkReplicationState"`
-	ForceSlaveHeartbeat                       bool   `mapstructure:"force-slave-heartbeat" toml:"force-slave-heartbeat" json:"forceSlaveHeartbeat"`
-	ForceSlaveHeartbeatTime                   int    `mapstructure:"force-slave-heartbeat-time" toml:"force-slave-heartbeat-time" json:"forceSlaveHeartbeatTime"`
-	ForceSlaveHeartbeatRetry                  int    `mapstructure:"force-slave-heartbeat-retry" toml:"force-slave-heartbeat-retry" json:"forceSlaveHeartbeatRetry"`
-	ForceSlaveGtid                            bool   `mapstructure:"force-slave-gtid-mode" toml:"force-slave-gtid-mode" json:"forceSlaveGtidMode"`
-	ForceSlaveGtidStrict                      bool   `mapstructure:"force-slave-gtid-mode-strict" toml:"force-slave-gtid-mode-strict" json:"forceSlaveGtidModeStrict"`
-	ForceSlaveNoGtid                          bool   `mapstructure:"force-slave-no-gtid-mode" toml:"force-slave-no-gtid-mode" json:"forceSlaveNoGtidMode"`
-	ForceSlaveSemisync                        bool   `mapstructure:"force-slave-semisync" toml:"force-slave-semisync" json:"forceSlaveSemisync"`
-	ForceSlaveReadOnly                        bool   `mapstructure:"force-slave-readonly" toml:"force-slave-readonly" json:"forceSlaveReadonly"`
+	ForceSubordinateHeartbeat                       bool   `mapstructure:"force-subordinate-heartbeat" toml:"force-subordinate-heartbeat" json:"forceSubordinateHeartbeat"`
+	ForceSubordinateHeartbeatTime                   int    `mapstructure:"force-subordinate-heartbeat-time" toml:"force-subordinate-heartbeat-time" json:"forceSubordinateHeartbeatTime"`
+	ForceSubordinateHeartbeatRetry                  int    `mapstructure:"force-subordinate-heartbeat-retry" toml:"force-subordinate-heartbeat-retry" json:"forceSubordinateHeartbeatRetry"`
+	ForceSubordinateGtid                            bool   `mapstructure:"force-subordinate-gtid-mode" toml:"force-subordinate-gtid-mode" json:"forceSubordinateGtidMode"`
+	ForceSubordinateGtidStrict                      bool   `mapstructure:"force-subordinate-gtid-mode-strict" toml:"force-subordinate-gtid-mode-strict" json:"forceSubordinateGtidModeStrict"`
+	ForceSubordinateNoGtid                          bool   `mapstructure:"force-subordinate-no-gtid-mode" toml:"force-subordinate-no-gtid-mode" json:"forceSubordinateNoGtidMode"`
+	ForceSubordinateSemisync                        bool   `mapstructure:"force-subordinate-semisync" toml:"force-subordinate-semisync" json:"forceSubordinateSemisync"`
+	ForceSubordinateReadOnly                        bool   `mapstructure:"force-subordinate-readonly" toml:"force-subordinate-readonly" json:"forceSubordinateReadonly"`
 	ForceBinlogRow                            bool   `mapstructure:"force-binlog-row" toml:"force-binlog-row" json:"forceBinlogRow"`
 	ForceBinlogAnnotate                       bool   `mapstructure:"force-binlog-annotate" toml:"force-binlog-annotate" json:"forceBinlogAnnotate"`
 	ForceBinlogCompress                       bool   `mapstructure:"force-binlog-compress" toml:"force-binlog-compress" json:"forceBinlogCompress"`
@@ -177,7 +177,7 @@ type Config struct {
 	ForceDiskRelayLogSizeLimitSize            uint64 `mapstructure:"force-disk-relaylog-size-limit-size"  toml:"force-disk-relaylog-size-limit-size" json:"forceDiskRelaylogSizeLimitSize"`
 	ForceSyncBinlog                           bool   `mapstructure:"force-sync-binlog" toml:"force-sync-binlog" json:"forceSyncBinlog"`
 	ForceSyncInnoDB                           bool   `mapstructure:"force-sync-innodb" toml:"force-sync-innodb" json:"forceSyncInnodb"`
-	ForceNoslaveBehind                        bool   `mapstructure:"force-noslave-behind" toml:"force-noslave-behind" json:"forceNoslaveBehind"`
+	ForceNosubordinateBehind                        bool   `mapstructure:"force-nosubordinate-behind" toml:"force-nosubordinate-behind" json:"forceNosubordinateBehind"`
 	Spider                                    bool   `mapstructure:"spider" toml:"-" json:"-"`
 	BindAddr                                  string `mapstructure:"http-bind-address" toml:"http-bind-address" json:"httpBindAdress"`
 	HttpPort                                  string `mapstructure:"http-port" toml:"http-port" json:"httpPort"`
@@ -250,7 +250,7 @@ type Config struct {
 	ProxysqlBootstrapVariables                bool   `mapstructure:"proxysql-bootstrap-variables" toml:"proxysql-bootstrap-variables" json:"proxysqlBootstrapVariables"`
 	ProxysqlBootstrapHG                       bool   `mapstructure:"proxysql-bootstrap-hostgroups" toml:"proxysql-bootstrap-hostgroups" json:"proxysqlBootstrapHostgroups"`
 	ProxysqlBootstrapQueryRules               bool   `mapstructure:"proxysql-bootstrap-query-rules" toml:"proxysql-bootstrap-query-rules" json:"proxysqlBootstrapQueryRules"`
-	ProxysqlMasterIsReader                    bool   `mapstructure:"proxysql-master-is-reader" toml:"proxysql-master-is-reader" json:"proxysqlMasterIsReader"`
+	ProxysqlMainIsReader                    bool   `mapstructure:"proxysql-main-is-reader" toml:"proxysql-main-is-reader" json:"proxysqlMainIsReader"`
 	ProxysqlMultiplexing                      bool   `mapstructure:"proxysql-multiplexing" toml:"proxysql-multiplexing" json:"proxysqlMultiplexing"`
 	ProxysqlBinaryPath                        string `mapstructure:"proxysql-binary-path" toml:"proxysql-binary-path" json:"proxysqlBinaryPath"`
 	MysqlRouterOn                             bool   `mapstructure:"mysqlrouter" toml:"mysqlrouter" json:"mysqlrouter"`
@@ -288,7 +288,7 @@ type Config struct {
 	ArbitrationSasHosts                       string `mapstructure:"arbitration-external-hosts" toml:"arbitration-external-hosts" json:"arbitrationExternalHosts"`
 	ArbitrationSasUniqueId                    int    `mapstructure:"arbitration-external-unique-id" toml:"arbitration-external-unique-id" json:"arbitrationExternalUniqueId"`
 	ArbitrationPeerHosts                      string `mapstructure:"arbitration-peer-hosts" toml:"arbitration-peer-hosts" json:"arbitrationPeerHosts"`
-	ArbitrationFailedMasterScript             string `mapstructure:"arbitration-failed-master-script" toml:"arbitration-failed-master-script" json:"arbitrationFailedMasterScript"`
+	ArbitrationFailedMainScript             string `mapstructure:"arbitration-failed-main-script" toml:"arbitration-failed-main-script" json:"arbitrationFailedMainScript"`
 	ArbitratorAddress                         string `mapstructure:"arbitrator-bind-address" toml:"arbitrator-bind-address" json:"arbitratorBindAddress"`
 	ArbitratorDriver                          string `mapstructure:"arbitrator-driver" toml:"arbitrator-driver" json:"arbitratorDriver"`
 	FailForceGtid                             bool   `toml:"-" json:"-"` //suspicious code
@@ -337,7 +337,7 @@ type Config struct {
 	ProvDiskPool                              string `mapstructure:"prov-db-disk-pool" toml:"prov-db-disk-pool" json:"provDbDiskPool"`
 	ProvDiskDevice                            string `mapstructure:"prov-db-disk-device" toml:"prov-db-disk-device" json:"provDbDiskDevice"`
 	ProvDiskType                              string `mapstructure:"prov-db-disk-type" toml:"prov-db-disk-type" json:"provDbDiskType"`
-	ProvDiskSnapshot                          bool   `mapstructure:"prov-db-disk-snapshot-prefered-master" toml:"prov-db-disk-snapshot-prefered-master" json:"provDbDiskSnapshotPreferedMaster"`
+	ProvDiskSnapshot                          bool   `mapstructure:"prov-db-disk-snapshot-prefered-main" toml:"prov-db-disk-snapshot-prefered-main" json:"provDbDiskSnapshotPreferedMain"`
 	ProvDiskSnapshotKeep                      int    `mapstructure:"prov-db-disk-snapshot-keep" toml:"prov-db-disk-snapshot-keep" json:"provDbDiskSnapshotKeep"`
 	ProvNetIface                              string `mapstructure:"prov-db-net-iface" toml:"prov-db-net-iface" json:"provDbNetIface"`
 	ProvNetmask                               string `mapstructure:"prov-db-net-mask" toml:"prov-db-net-mask" json:"provDbNetMask"`
@@ -756,14 +756,14 @@ func (conf *Config) GetPoolType() map[string]bool {
 
 func (conf *Config) GetTopologyType() map[string]string {
 	return map[string]string{
-		"master-slave":            "master-slave",
+		"main-subordinate":            "main-subordinate",
 		"binlog-server":           "binlog-server",
-		"multi-tier-slave":        "multi-tier-slave",
-		"multi-master":            "multi-master",
-		"multi-master-ring":       "multi-master-ring",
-		"multi-master-wsrep":      "multi-master-wsrep",
-		"master-slave-pg-logical": "master-slave-pg-logical",
-		"master-slave-pg-stream":  "master-slave-pg-stream",
+		"multi-tier-subordinate":        "multi-tier-subordinate",
+		"multi-main":            "multi-main",
+		"multi-main-ring":       "multi-main-ring",
+		"multi-main-wsrep":      "multi-main-wsrep",
+		"main-subordinate-pg-logical": "main-subordinate-pg-logical",
+		"main-subordinate-pg-stream":  "main-subordinate-pg-stream",
 		"unknown":                 "unknown",
 	}
 }

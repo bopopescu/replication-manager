@@ -14,7 +14,7 @@ import (
 
 func testFailoverTimeNotReach(cluster *cluster.Cluster, conf string, test *cluster.Test) bool {
 
-	cluster.LogPrintf("TEST", "Master is %s", cluster.GetMaster().URL)
+	cluster.LogPrintf("TEST", "Main is %s", cluster.GetMain().URL)
 	cluster.SetInteractive(false)
 	cluster.SetFailLimit(3)
 	cluster.SetFailTime(60)
@@ -29,14 +29,14 @@ func testFailoverTimeNotReach(cluster *cluster.Cluster, conf string, test *clust
 
 		return false
 	}
-	SaveMasterURL := cluster.GetMaster().URL
+	SaveMainURL := cluster.GetMain().URL
 	cluster.SetFailoverTs(time.Now().Unix())
 	//Giving time for state dicovery
 	time.Sleep(4 * time.Second)
 	cluster.FailoverAndWait()
-	cluster.LogPrintf("TEST", "New Master  %s ", cluster.GetMaster().URL)
-	if cluster.GetMaster().URL != SaveMasterURL {
-		cluster.LogPrintf(LvlErr, "Old master %s ==  Next master %s  ", SaveMasterURL, cluster.GetMaster().URL)
+	cluster.LogPrintf("TEST", "New Main  %s ", cluster.GetMain().URL)
+	if cluster.GetMain().URL != SaveMainURL {
+		cluster.LogPrintf(LvlErr, "Old main %s ==  Next main %s  ", SaveMainURL, cluster.GetMain().URL)
 		return false
 	}
 

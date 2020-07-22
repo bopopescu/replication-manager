@@ -13,69 +13,69 @@ import (
 func (cluster *Cluster) RollingReprov() error {
 
 	cluster.LogPrintf(LvlInfo, "Rolling reprovisionning")
-	masterID := cluster.GetMaster().Id
-	for _, slave := range cluster.slaves {
-		if !slave.IsDown() {
-			if !slave.IsMaintenance {
-				slave.SwitchMaintenance()
+	mainID := cluster.GetMain().Id
+	for _, subordinate := range cluster.subordinates {
+		if !subordinate.IsDown() {
+			if !subordinate.IsMaintenance {
+				subordinate.SwitchMaintenance()
 			}
-			err := cluster.UnprovisionDatabaseService(slave)
+			err := cluster.UnprovisionDatabaseService(subordinate)
 			if err != nil {
 				cluster.LogPrintf(LvlErr, "Cancel rolling reprov %s", err)
 				return err
 			}
-			err = cluster.WaitDatabaseFailed(slave)
+			err = cluster.WaitDatabaseFailed(subordinate)
 			if err != nil {
-				cluster.LogPrintf(LvlErr, "Cancel rolling restart slave does not transit suspect %s %s", slave.URL, err)
+				cluster.LogPrintf(LvlErr, "Cancel rolling restart subordinate does not transit suspect %s %s", subordinate.URL, err)
 				return err
 			}
-			err = cluster.InitDatabaseService(slave)
+			err = cluster.InitDatabaseService(subordinate)
 			if err != nil {
 				cluster.LogPrintf(LvlErr, "Cancel rolling reprov %s", err)
 				return err
 			}
-			err = cluster.StartDatabaseWaitRejoin(slave)
+			err = cluster.StartDatabaseWaitRejoin(subordinate)
 			if err != nil {
 				cluster.LogPrintf(LvlErr, "Cancel rolling reprov %s", err)
 				return err
 			}
 
-			slave.WaitSyncToMaster(cluster.master)
-			slave.SwitchMaintenance()
+			subordinate.WaitSyncToMain(cluster.main)
+			subordinate.SwitchMaintenance()
 		}
 	}
 	cluster.SwitchoverWaitTest()
-	master := cluster.GetServerFromName(masterID)
-	if cluster.master.DSN == master.DSN {
-		cluster.LogPrintf(LvlErr, "Cancel rolling restart master is the same after Switchover")
+	main := cluster.GetServerFromName(mainID)
+	if cluster.main.DSN == main.DSN {
+		cluster.LogPrintf(LvlErr, "Cancel rolling restart main is the same after Switchover")
 		return nil
 	}
-	if !master.IsDown() {
-		if !master.IsMaintenance {
-			master.SwitchMaintenance()
+	if !main.IsDown() {
+		if !main.IsMaintenance {
+			main.SwitchMaintenance()
 		}
-		err := cluster.UnprovisionDatabaseService(master)
+		err := cluster.UnprovisionDatabaseService(main)
 		if err != nil {
 			cluster.LogPrintf(LvlErr, "Cancel rolling reprov %s", err)
 			return err
 		}
-		err = cluster.WaitDatabaseFailed(master)
+		err = cluster.WaitDatabaseFailed(main)
 		if err != nil {
-			cluster.LogPrintf(LvlErr, "Cancel rolling restart slave does not transit suspect %s %s", master.URL, err)
+			cluster.LogPrintf(LvlErr, "Cancel rolling restart subordinate does not transit suspect %s %s", main.URL, err)
 			return err
 		}
-		err = cluster.InitDatabaseService(master)
-		if err != nil {
-			cluster.LogPrintf(LvlErr, "Cancel rolling reprov %s", err)
-			return err
-		}
-		err = cluster.WaitDatabaseStart(master)
+		err = cluster.InitDatabaseService(main)
 		if err != nil {
 			cluster.LogPrintf(LvlErr, "Cancel rolling reprov %s", err)
 			return err
 		}
-		master.WaitSyncToMaster(cluster.master)
-		master.SwitchMaintenance()
+		err = cluster.WaitDatabaseStart(main)
+		if err != nil {
+			cluster.LogPrintf(LvlErr, "Cancel rolling reprov %s", err)
+			return err
+		}
+		main.WaitSyncToMain(cluster.main)
+		main.SwitchMaintenance()
 		cluster.SwitchOver()
 	}
 	return nil
@@ -83,75 +83,75 @@ func (cluster *Cluster) RollingReprov() error {
 
 func (cluster *Cluster) RollingRestart() error {
 	cluster.LogPrintf(LvlInfo, "Rolling restart")
-	masterID := cluster.GetMaster().Id
+	mainID := cluster.GetMain().Id
 	saveFailoverMode := cluster.Conf.FailSync
 	cluster.SetFailSync(false)
 	defer cluster.SetFailSync(saveFailoverMode)
-	for _, slave := range cluster.slaves {
+	for _, subordinate := range cluster.subordinates {
 
-		if !slave.IsDown() {
-			//slave.SetMaintenance()
+		if !subordinate.IsDown() {
+			//subordinate.SetMaintenance()
 			//proxy.
-			if !slave.IsMaintenance {
-				slave.SwitchMaintenance()
+			if !subordinate.IsMaintenance {
+				subordinate.SwitchMaintenance()
 			}
-			err := cluster.StopDatabaseService(slave)
+			err := cluster.StopDatabaseService(subordinate)
 			if err != nil {
-				cluster.LogPrintf(LvlErr, "Cancel rolling restart stop failed on slave %s %s", slave.URL, err)
+				cluster.LogPrintf(LvlErr, "Cancel rolling restart stop failed on subordinate %s %s", subordinate.URL, err)
 				return err
 			}
 
-			err = cluster.WaitDatabaseFailed(slave)
+			err = cluster.WaitDatabaseFailed(subordinate)
 			if err != nil {
-				cluster.LogPrintf(LvlErr, "Cancel rolling restart slave does not transit suspect %s %s", slave.URL, err)
+				cluster.LogPrintf(LvlErr, "Cancel rolling restart subordinate does not transit suspect %s %s", subordinate.URL, err)
 				return err
 			}
 
-			err = cluster.StartDatabaseWaitRejoin(slave)
+			err = cluster.StartDatabaseWaitRejoin(subordinate)
 			if err != nil {
-				cluster.LogPrintf(LvlErr, "Cancel rolling restart slave does not restart %s %s", slave.URL, err)
+				cluster.LogPrintf(LvlErr, "Cancel rolling restart subordinate does not restart %s %s", subordinate.URL, err)
 				return err
 			}
 		}
-		slave.WaitSyncToMaster(cluster.master)
-		slave.SwitchMaintenance()
+		subordinate.WaitSyncToMain(cluster.main)
+		subordinate.SwitchMaintenance()
 	}
 	cluster.SwitchoverWaitTest()
-	master := cluster.GetServerFromName(masterID)
-	if cluster.master.DSN == master.DSN {
-		cluster.LogPrintf(LvlErr, "Cancel rolling restart master is the same after Switchover")
+	main := cluster.GetServerFromName(mainID)
+	if cluster.main.DSN == main.DSN {
+		cluster.LogPrintf(LvlErr, "Cancel rolling restart main is the same after Switchover")
 		return nil
 	}
-	if master.IsDown() {
-		return errors.New("Cancel roolling restart master down")
+	if main.IsDown() {
+		return errors.New("Cancel roolling restart main down")
 	}
-	if !master.IsMaintenance {
-		master.SwitchMaintenance()
+	if !main.IsMaintenance {
+		main.SwitchMaintenance()
 	}
-	err := cluster.StopDatabaseService(master)
+	err := cluster.StopDatabaseService(main)
 	if err != nil {
-		cluster.LogPrintf(LvlErr, "Cancel rolling restart old master stop failed %s %s", master.URL, err)
+		cluster.LogPrintf(LvlErr, "Cancel rolling restart old main stop failed %s %s", main.URL, err)
 		return err
 	}
-	err = cluster.WaitDatabaseFailed(master)
+	err = cluster.WaitDatabaseFailed(main)
 	if err != nil {
-		cluster.LogPrintf(LvlErr, "Cancel rolling restart old master does not transit suspect %s %s", master.URL, err)
+		cluster.LogPrintf(LvlErr, "Cancel rolling restart old main does not transit suspect %s %s", main.URL, err)
 		return err
 	}
-	err = cluster.StartDatabaseWaitRejoin(master)
+	err = cluster.StartDatabaseWaitRejoin(main)
 	if err != nil {
-		cluster.LogPrintf(LvlErr, "Cancel rolling restart old master does not restart %s %s", master.URL, err)
+		cluster.LogPrintf(LvlErr, "Cancel rolling restart old main does not restart %s %s", main.URL, err)
 		return err
 	}
-	master.WaitSyncToMaster(cluster.master)
-	master.SwitchMaintenance()
+	main.WaitSyncToMain(cluster.main)
+	main.SwitchMaintenance()
 	cluster.SwitchOver()
 
 	return nil
 }
 
 func (cluster *Cluster) RollingOptimize() {
-	for _, s := range cluster.slaves {
+	for _, s := range cluster.subordinates {
 		jobid, _ := s.JobOptimize()
 		cluster.LogPrintf(LvlInfo, "Optimize job id %d on %s ", jobid, s.URL)
 	}

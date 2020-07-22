@@ -8,7 +8,7 @@ import (
 )
 
 var tests = []string{
-	"testSwitchoverAllSlavesDelayMultimasterNoRplChecksNoSemiSync",
+	"testSwitchoverAllSubordinatesDelayMultimainNoRplChecksNoSemiSync",
 	"testSwitchoverLongTransactionNoRplCheckNoSemiSync",
 	"testSwitchoverLongQueryNoRplCheckNoSemiSync",
 	"testSwitchoverLongTrxWithoutCommitNoRplCheckNoSemiSync",
@@ -16,11 +16,11 @@ var tests = []string{
 	"testSwitchoverNoReadOnlyNoRplCheck",
 	"testSwitchover2TimesReplicationOkNoSemiSyncNoRplCheck",
 	"testSwitchover2TimesReplicationOkSemiSyncNoRplCheck",
-	"testSwitchoverBackPreferedMasterNoRplCheckSemiSync",
-	"testSwitchoverAllSlavesStopRplCheckNoSemiSync",
-	"testSwitchoverAllSlavesStopNoSemiSyncNoRplCheck",
-	"testSwitchoverAllSlavesDelayRplCheckNoSemiSync",
-	"testSwitchoverAllSlavesDelayNoRplChecksNoSemiSync",
+	"testSwitchoverBackPreferedMainNoRplCheckSemiSync",
+	"testSwitchoverAllSubordinatesStopRplCheckNoSemiSync",
+	"testSwitchoverAllSubordinatesStopNoSemiSyncNoRplCheck",
+	"testSwitchoverAllSubordinatesDelayRplCheckNoSemiSync",
+	"testSwitchoverAllSubordinatesDelayNoRplChecksNoSemiSync",
 	"testFailoverSemisyncAutoRejoinSafeMSMXMS",
 	"testFailoverSemisyncAutoRejoinSafeMSXMSM",
 	"testFailoverSemisyncAutoRejoinSafeMSMXXXRMXMS",
@@ -35,10 +35,10 @@ var tests = []string{
 	"testFailoverSemisyncAutoRejoinUnsafeMSMXXXRXMSM",
 	"testFailoverAssyncAutoRejoinRelay",
 	"testFailoverAssyncAutoRejoinNoGtid",
-	"testFailoverAllSlavesDelayNoRplChecksNoSemiSync",
-	"testFailoverAllSlavesDelayRplChecksNoSemiSync",
+	"testFailoverAllSubordinatesDelayNoRplChecksNoSemiSync",
+	"testFailoverAllSubordinatesDelayRplChecksNoSemiSync",
 	"testFailoverNoRplChecksNoSemiSync",
-	"testFailoverNoRplChecksNoSemiSyncMasterHeartbeat",
+	"testFailoverNoRplChecksNoSemiSyncMainHeartbeat",
 	"testFailoverNumberFailureLimitReach",
 	"testFailoverTimeNotReach",
 	"testFailoverManual",
@@ -47,9 +47,9 @@ var tests = []string{
 	"testFailoverAssyncAutoRejoinNowrites",
 	"testFailoverSemisyncAutoRejoinMSSXMSXXMSXMSSM",
 	"testFailoverSemisyncAutoRejoinMSSXMSXXMXSMSSM",
-	"testFailoverSemisyncSlavekilledAutoRejoin",
-	"testSlaReplAllSlavesStopNoSemiSync",
-	"testSlaReplAllSlavesDelayNoSemiSync",
+	"testFailoverSemisyncSubordinatekilledAutoRejoin",
+	"testSlaReplAllSubordinatesStopNoSemiSync",
+	"testSlaReplAllSubordinatesDelayNoSemiSync",
 }
 
 const recoverTime = 8
@@ -261,15 +261,15 @@ func (regtest *RegTest) RunAllTests(cl *cluster.Cluster, test string) []cluster.
 		allTests["testFailoverSemisyncAutoRejoinMSSXMSXXMXSMSSM"] = thistest
 		cl.CloseTestCluster(conf, &thistest)
 	}
-	if test == "testFailoverSemisyncSlavekilledAutoRejoin" || test == "ALL" {
-		thistest.Name = "testFailoverSemisyncSlavekilledAutoRejoin"
+	if test == "testFailoverSemisyncSubordinatekilledAutoRejoin" || test == "ALL" {
+		thistest.Name = "testFailoverSemisyncSubordinatekilledAutoRejoin"
 		if cl.InitTestCluster(conf, &thistest) == true {
-			res = testFailoverSemisyncSlavekilledAutoRejoin(cl, conf, &thistest)
+			res = testFailoverSemisyncSubordinatekilledAutoRejoin(cl, conf, &thistest)
 			thistest.Result = regtest.getTestResultLabel(res)
 		} else {
 			thistest.Result = "ERR"
 		}
-		allTests["testFailoverSemisyncSlavekilledAutoRejoin"] = thistest
+		allTests["testFailoverSemisyncSubordinatekilledAutoRejoin"] = thistest
 		cl.CloseTestCluster(conf, &thistest)
 	}
 
@@ -317,16 +317,16 @@ func (regtest *RegTest) RunAllTests(cl *cluster.Cluster, test string) []cluster.
 		allTests["testFailoverAssyncAutoRejoinDump"] = thistest
 		cl.CloseTestCluster(conf, &thistest)
 	}
-	if test == "testSwitchoverAllSlavesDelayMultimasterNoRplChecksNoSemiSync" || test == "ALL" {
-		thistest.Name = "testSwitchoverAllSlavesDelayMultimasterNoRplChecksNoSemiSync"
+	if test == "testSwitchoverAllSubordinatesDelayMultimainNoRplChecksNoSemiSync" || test == "ALL" {
+		thistest.Name = "testSwitchoverAllSubordinatesDelayMultimainNoRplChecksNoSemiSync"
 		if cl.InitTestCluster(conf, &thistest) == true {
-			res = testSwitchoverAllSlavesDelayMultimasterNoRplChecksNoSemiSync(cl, conf, &thistest)
+			res = testSwitchoverAllSubordinatesDelayMultimainNoRplChecksNoSemiSync(cl, conf, &thistest)
 			thistest.Result = regtest.getTestResultLabel(res)
 			cl.CloseTestCluster(conf, &thistest)
 		} else {
 			thistest.Result = "ERR"
 		}
-		allTests["testSwitchoverAllSlavesDelayMultimasterNoRplChecksNoSemiSync"] = thistest
+		allTests["testSwitchoverAllSubordinatesDelayMultimainNoRplChecksNoSemiSync"] = thistest
 		cl.CloseTestCluster(conf, &thistest)
 	}
 	if test == "testSwitchoverLongTransactionNoRplCheckNoSemiSync" || test == "ALL" {
@@ -406,81 +406,81 @@ func (regtest *RegTest) RunAllTests(cl *cluster.Cluster, test string) []cluster.
 		allTests["testSwitchover2TimesReplicationOkSemiSyncNoRplCheck"] = thistest
 		cl.CloseTestCluster(conf, &thistest)
 	}
-	if test == "testSwitchoverBackPreferedMasterNoRplCheckSemiSync" || test == "ALL" {
-		thistest.Name = "testSwitchoverBackPreferedMasterNoRplCheckSemiSync"
+	if test == "testSwitchoverBackPreferedMainNoRplCheckSemiSync" || test == "ALL" {
+		thistest.Name = "testSwitchoverBackPreferedMainNoRplCheckSemiSync"
 		if cl.InitTestCluster(conf, &thistest) == true {
-			res = testSwitchoverBackPreferedMasterNoRplCheckSemiSync(cl, conf, &thistest)
+			res = testSwitchoverBackPreferedMainNoRplCheckSemiSync(cl, conf, &thistest)
 			thistest.Result = regtest.getTestResultLabel(res)
 		} else {
 			thistest.Result = "ERR"
 		}
-		allTests["testSwitchoverBackPreferedMasterNoRplCheckSemiSync"] = thistest
+		allTests["testSwitchoverBackPreferedMainNoRplCheckSemiSync"] = thistest
 		cl.CloseTestCluster(conf, &thistest)
 	}
-	if test == "testSwitchoverAllSlavesStopRplCheckNoSemiSync" || test == "ALL" {
-		thistest.Name = "testSwitchoverAllSlavesStopRplCheckNoSemiSync"
+	if test == "testSwitchoverAllSubordinatesStopRplCheckNoSemiSync" || test == "ALL" {
+		thistest.Name = "testSwitchoverAllSubordinatesStopRplCheckNoSemiSync"
 		if cl.InitTestCluster(conf, &thistest) == true {
-			res = testSwitchoverAllSlavesStopRplCheckNoSemiSync(cl, conf, &thistest)
+			res = testSwitchoverAllSubordinatesStopRplCheckNoSemiSync(cl, conf, &thistest)
 			thistest.Result = regtest.getTestResultLabel(res)
 		} else {
 			thistest.Result = "ERR"
 		}
-		allTests["testSwitchoverAllSlavesStopRplCheckNoSemiSync"] = thistest
+		allTests["testSwitchoverAllSubordinatesStopRplCheckNoSemiSync"] = thistest
 		cl.CloseTestCluster(conf, &thistest)
 	}
-	if test == "testSwitchoverAllSlavesStopNoSemiSyncNoRplCheck" || test == "ALL" {
-		thistest.Name = "testSwitchoverAllSlavesStopNoSemiSyncNoRplCheck"
+	if test == "testSwitchoverAllSubordinatesStopNoSemiSyncNoRplCheck" || test == "ALL" {
+		thistest.Name = "testSwitchoverAllSubordinatesStopNoSemiSyncNoRplCheck"
 		if cl.InitTestCluster(conf, &thistest) == true {
-			res = testSwitchoverAllSlavesStopNoSemiSyncNoRplCheck(cl, conf, &thistest)
+			res = testSwitchoverAllSubordinatesStopNoSemiSyncNoRplCheck(cl, conf, &thistest)
 			thistest.Result = regtest.getTestResultLabel(res)
 		} else {
 			thistest.Result = "ERR"
 		}
-		allTests["testSwitchoverAllSlavesStopNoSemiSyncNoRplCheck"] = thistest
+		allTests["testSwitchoverAllSubordinatesStopNoSemiSyncNoRplCheck"] = thistest
 		cl.CloseTestCluster(conf, &thistest)
 	}
-	if test == "testSwitchoverAllSlavesDelayRplCheckNoSemiSync" || test == "ALL" {
-		thistest.Name = "testSwitchoverAllSlavesDelayRplCheckNoSemiSync"
+	if test == "testSwitchoverAllSubordinatesDelayRplCheckNoSemiSync" || test == "ALL" {
+		thistest.Name = "testSwitchoverAllSubordinatesDelayRplCheckNoSemiSync"
 		if cl.InitTestCluster(conf, &thistest) == true {
-			res = testSwitchoverAllSlavesDelayRplCheckNoSemiSync(cl, conf, &thistest)
+			res = testSwitchoverAllSubordinatesDelayRplCheckNoSemiSync(cl, conf, &thistest)
 			thistest.Result = regtest.getTestResultLabel(res)
 		} else {
 			thistest.Result = "ERR"
 		}
-		allTests["testSwitchoverAllSlavesDelayRplCheckNoSemiSync"] = thistest
+		allTests["testSwitchoverAllSubordinatesDelayRplCheckNoSemiSync"] = thistest
 		cl.CloseTestCluster(conf, &thistest)
 	}
-	if test == "testSwitchoverAllSlavesDelayNoRplChecksNoSemiSync" || test == "ALL" {
-		thistest.Name = "testSwitchoverAllSlavesDelayNoRplChecksNoSemiSync"
+	if test == "testSwitchoverAllSubordinatesDelayNoRplChecksNoSemiSync" || test == "ALL" {
+		thistest.Name = "testSwitchoverAllSubordinatesDelayNoRplChecksNoSemiSync"
 		if cl.InitTestCluster(conf, &thistest) == true {
-			res = testSwitchoverAllSlavesDelayNoRplChecksNoSemiSync(cl, conf, &thistest)
+			res = testSwitchoverAllSubordinatesDelayNoRplChecksNoSemiSync(cl, conf, &thistest)
 			thistest.Result = regtest.getTestResultLabel(res)
 		} else {
 			thistest.Result = "ERR"
 		}
-		allTests["testSwitchoverAllSlavesDelayNoRplChecksNoSemiSync"] = thistest
+		allTests["testSwitchoverAllSubordinatesDelayNoRplChecksNoSemiSync"] = thistest
 		cl.CloseTestCluster(conf, &thistest)
 	}
-	if test == "testSlaReplAllSlavesStopNoSemiSync" || test == "ALL" {
-		thistest.Name = "testSlaReplAllSlavesStopNoSemiSync"
+	if test == "testSlaReplAllSubordinatesStopNoSemiSync" || test == "ALL" {
+		thistest.Name = "testSlaReplAllSubordinatesStopNoSemiSync"
 		if cl.InitTestCluster(conf, &thistest) == true {
-			res = testSlaReplAllSlavesStopNoSemiSync(cl, conf, &thistest)
+			res = testSlaReplAllSubordinatesStopNoSemiSync(cl, conf, &thistest)
 			thistest.Result = regtest.getTestResultLabel(res)
 		} else {
 			thistest.Result = "ERR"
 		}
-		allTests["testSlaReplAllSlavesStopNoSemiSync"] = thistest
+		allTests["testSlaReplAllSubordinatesStopNoSemiSync"] = thistest
 		cl.CloseTestCluster(conf, &thistest)
 	}
-	if test == "testSlaReplAllSlavesDelayNoSemiSync" || test == "ALL" {
-		thistest.Name = "testSlaReplAllSlavesDelayNoSemiSync"
+	if test == "testSlaReplAllSubordinatesDelayNoSemiSync" || test == "ALL" {
+		thistest.Name = "testSlaReplAllSubordinatesDelayNoSemiSync"
 		if cl.InitTestCluster(conf, &thistest) == true {
-			res = testSlaReplAllSlavesDelayNoSemiSync(cl, conf, &thistest)
+			res = testSlaReplAllSubordinatesDelayNoSemiSync(cl, conf, &thistest)
 			thistest.Result = regtest.getTestResultLabel(res)
 		} else {
 			thistest.Result = "ERR"
 		}
-		allTests["testSlaReplAllSlavesDelayNoSemiSync"] = thistest
+		allTests["testSlaReplAllSubordinatesDelayNoSemiSync"] = thistest
 		cl.CloseTestCluster(conf, &thistest)
 	}
 	if test == "testFailoverNoRplChecksNoSemiSync" || test == "ALL" {
@@ -494,26 +494,26 @@ func (regtest *RegTest) RunAllTests(cl *cluster.Cluster, test string) []cluster.
 		allTests["testFailoverNoRplChecksNoSemiSync"] = thistest
 		cl.CloseTestCluster(conf, &thistest)
 	}
-	if test == "testFailoverAllSlavesDelayNoRplChecksNoSemiSync" || test == "ALL" {
+	if test == "testFailoverAllSubordinatesDelayNoRplChecksNoSemiSync" || test == "ALL" {
 		if cl.InitTestCluster(conf, &thistest) == true {
-			thistest.Name = "testFailoverAllSlavesDelayNoRplChecksNoSemiSync"
-			res = testFailoverAllSlavesDelayNoRplChecksNoSemiSync(cl, conf, &thistest)
+			thistest.Name = "testFailoverAllSubordinatesDelayNoRplChecksNoSemiSync"
+			res = testFailoverAllSubordinatesDelayNoRplChecksNoSemiSync(cl, conf, &thistest)
 			thistest.Result = regtest.getTestResultLabel(res)
 		} else {
 			thistest.Result = "ERR"
 		}
-		allTests["testFailoverAllSlavesDelayNoRplChecksNoSemiSync"] = thistest
+		allTests["testFailoverAllSubordinatesDelayNoRplChecksNoSemiSync"] = thistest
 		cl.CloseTestCluster(conf, &thistest)
 	}
-	if test == "testFailoverAllSlavesDelayRplChecksNoSemiSync" || test == "ALL" {
-		thistest.Name = "testFailoverAllSlavesDelayRplChecksNoSemiSync"
+	if test == "testFailoverAllSubordinatesDelayRplChecksNoSemiSync" || test == "ALL" {
+		thistest.Name = "testFailoverAllSubordinatesDelayRplChecksNoSemiSync"
 		if cl.InitTestCluster(conf, &thistest) == true {
-			res = testFailoverAllSlavesDelayRplChecksNoSemiSync(cl, conf, &thistest)
+			res = testFailoverAllSubordinatesDelayRplChecksNoSemiSync(cl, conf, &thistest)
 			thistest.Result = regtest.getTestResultLabel(res)
 		} else {
 			thistest.Result = "ERR"
 		}
-		allTests["testFailoverAllSlavesDelayRplChecksNoSemiSync"] = thistest
+		allTests["testFailoverAllSubordinatesDelayRplChecksNoSemiSync"] = thistest
 		cl.CloseTestCluster(conf, &thistest)
 	}
 	if test == "testFailoverNumberFailureLimitReach" || test == "ALL" {

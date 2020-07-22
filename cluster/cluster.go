@@ -94,10 +94,10 @@ type Cluster struct {
 	hostList                      []string                    `json:"-"`
 	proxyList                     []string                    `json:"-"`
 	clusterList                   map[string]*Cluster         `json:"-"`
-	slaves                        serverList                  `json:"-"`
-	master                        *ServerMonitor              `json:"-"`
-	oldMaster                     *ServerMonitor              `json:"-"`
-	vmaster                       *ServerMonitor              `json:"-"`
+	subordinates                        serverList                  `json:"-"`
+	main                        *ServerMonitor              `json:"-"`
+	oldMain                     *ServerMonitor              `json:"-"`
+	vmain                       *ServerMonitor              `json:"-"`
 	mxs                           *maxscale.MaxScale          `json:"-"`
 	dbUser                        string                      `json:"-"`
 	dbPass                        string                      `json:"-"`
@@ -126,7 +126,7 @@ type Cluster struct {
 	errorChan                     chan error                  `json:"-"`
 	testStopCluster               bool                        `json:"-"`
 	testStartCluster              bool                        `json:"-"`
-	lastmaster                    *ServerMonitor              `json:"-"`
+	lastmain                    *ServerMonitor              `json:"-"`
 	benchmarkType                 string                      `json:"-"`
 	HaveDBTLSCert                 bool                        `json:"haveDBTLSCert"`
 	HaveDBTLSOldCert              bool                        `json:"haveDBTLSOldCert"`
@@ -394,7 +394,7 @@ func (cluster *Cluster) Run() {
 			if sig {
 				if cluster.Status == "A" {
 					cluster.LogPrintf(LvlInfo, "Signaling Switchover...")
-					cluster.MasterFailover(false)
+					cluster.MainFailover(false)
 					cluster.switchoverCond.Send <- true
 				} else {
 					cluster.LogPrintf(LvlInfo, "Not in active mode, cancel switchover %s", cluster.Status)
@@ -407,10 +407,10 @@ func (cluster *Cluster) Run() {
 				for k, v := range cluster.Servers {
 					cluster.LogPrintf(LvlDbg, "Server [%d]: URL: %-15s State: %6s PrevState: %6s", k, v.URL, v.State, v.PrevState)
 				}
-				if cluster.master != nil {
-					cluster.LogPrintf(LvlDbg, "Master [ ]: URL: %-15s State: %6s PrevState: %6s", cluster.master.URL, cluster.master.State, cluster.master.PrevState)
-					for k, v := range cluster.slaves {
-						cluster.LogPrintf(LvlDbg, "Slave  [%d]: URL: %-15s State: %6s PrevState: %6s", k, v.URL, v.State, v.PrevState)
+				if cluster.main != nil {
+					cluster.LogPrintf(LvlDbg, "Main [ ]: URL: %-15s State: %6s PrevState: %6s", cluster.main.URL, cluster.main.State, cluster.main.PrevState)
+					for k, v := range cluster.subordinates {
+						cluster.LogPrintf(LvlDbg, "Subordinate  [%d]: URL: %-15s State: %6s PrevState: %6s", k, v.URL, v.State, v.PrevState)
 					}
 				}
 			}
@@ -423,7 +423,7 @@ func (cluster *Cluster) Run() {
 
 			if cluster.runOnceAfterTopology {
 
-				if cluster.GetMaster() != nil {
+				if cluster.GetMain() != nil {
 					cluster.initProxies()
 					cluster.ResticFetchRepo()
 					cluster.runOnceAfterTopology = false
@@ -434,7 +434,7 @@ func (cluster *Cluster) Run() {
 				if cluster.sme.SchemaMonitorEndTime+60 < time.Now().Unix() && !cluster.sme.IsInSchemaMonitor() {
 					go cluster.MonitorSchema()
 				}
-				if cluster.Conf.TestInjectTraffic || cluster.Conf.AutorejoinSlavePositionalHeartbeat || cluster.Conf.MonitorWriteHeartbeat {
+				if cluster.Conf.TestInjectTraffic || cluster.Conf.AutorejoinSubordinatePositionalHeartbeat || cluster.Conf.MonitorWriteHeartbeat {
 					cluster.InjectProxiesTraffic()
 				}
 				if cluster.sme.GetHeartbeats()%30 == 0 {
@@ -486,31 +486,31 @@ func (cluster *Cluster) StateProcessing() {
 		// trigger action on resolving states
 		cstates := cluster.sme.GetResolvedStates()
 		mybcksrv := cluster.GetBackupServer()
-		master := cluster.GetMaster()
+		main := cluster.GetMain()
 		for _, s := range cstates {
 			servertoreseed := cluster.GetServerFromURL(s.ServerUrl)
 			if s.ErrKey == "WARN0074" {
-				cluster.LogPrintf(LvlInfo, "Sending master physical backup to reseed %s", s.ServerUrl)
-				if master != nil {
+				cluster.LogPrintf(LvlInfo, "Sending main physical backup to reseed %s", s.ServerUrl)
+				if main != nil {
 					if mybcksrv != nil {
 						go cluster.SSTRunSender(mybcksrv.GetMyBackupDirectory()+cluster.Conf.BackupPhysicalType+".xbtream", servertoreseed)
 					} else {
-						go cluster.SSTRunSender(master.GetMasterBackupDirectory()+cluster.Conf.BackupPhysicalType+".xbtream", servertoreseed)
+						go cluster.SSTRunSender(main.GetMainBackupDirectory()+cluster.Conf.BackupPhysicalType+".xbtream", servertoreseed)
 					}
 				} else {
-					cluster.LogPrintf(LvlErr, "No master cancel backup reseeding %s", s.ServerUrl)
+					cluster.LogPrintf(LvlErr, "No main cancel backup reseeding %s", s.ServerUrl)
 				}
 			}
 			if s.ErrKey == "WARN0075" {
-				cluster.LogPrintf(LvlInfo, "Sending master logical backup to reseed %s", s.ServerUrl)
-				if master != nil {
+				cluster.LogPrintf(LvlInfo, "Sending main logical backup to reseed %s", s.ServerUrl)
+				if main != nil {
 					if mybcksrv != nil {
 						go cluster.SSTRunSender(mybcksrv.GetMyBackupDirectory()+"mysqldump.sql.gz", servertoreseed)
 					} else {
-						go cluster.SSTRunSender(master.GetMasterBackupDirectory()+"mysqldump.sql.gz", servertoreseed)
+						go cluster.SSTRunSender(main.GetMainBackupDirectory()+"mysqldump.sql.gz", servertoreseed)
 					}
 				} else {
-					cluster.LogPrintf(LvlErr, "No master cancel backup reseeding %s", s.ServerUrl)
+					cluster.LogPrintf(LvlErr, "No main cancel backup reseeding %s", s.ServerUrl)
 				}
 			}
 			if s.ErrKey == "WARN0076" {
@@ -658,7 +658,7 @@ func (cluster *Cluster) FailoverForce() error {
 		for _, s := range cluster.sme.GetStates() {
 			cluster.LogPrint(s)
 		}
-		// Test for ERR00012 - No master detected
+		// Test for ERR00012 - No main detected
 		if cluster.sme.CurState.Search("ERR00012") {
 			for _, s := range cluster.Servers {
 				if s.State == "" {
@@ -666,7 +666,7 @@ func (cluster *Cluster) FailoverForce() error {
 					if cluster.Conf.LogLevel > 2 {
 						cluster.LogPrintf(LvlDbg, "State failed set by state detection ERR00012")
 					}
-					cluster.master = s
+					cluster.main = s
 				}
 			}
 		} else {
@@ -674,7 +674,7 @@ func (cluster *Cluster) FailoverForce() error {
 
 		}
 	}
-	if cluster.master == nil {
+	if cluster.main == nil {
 		cluster.LogPrintf(LvlErr, "Could not find a failed server in the hosts list")
 		return errors.New("ERROR: Could not find a failed server in the hosts list")
 	}
@@ -687,7 +687,7 @@ func (cluster *Cluster) FailoverForce() error {
 		cluster.LogPrintf(LvlErr, "Failover time limit enforced. Next failover available in %d seconds", rem)
 		return errors.New("ERROR: Failover time limit enforced")
 	}
-	if cluster.MasterFailover(true) {
+	if cluster.MainFailover(true) {
 		sf.Count++
 		sf.Timestamp = cluster.FailoverTs
 		err := sf.write()
@@ -716,7 +716,7 @@ func (cluster *Cluster) ResetFailoverCtr() {
 
 func (cluster *Cluster) agentFlagCheck() {
 
-	// if slaves option has been supplied, split into a slice.
+	// if subordinates option has been supplied, split into a slice.
 	if cluster.Conf.Hosts != "" {
 		cluster.hostList = strings.Split(cluster.Conf.Hosts, ",")
 	} else {
@@ -745,10 +745,10 @@ func (cluster *Cluster) ResetCrashes() {
 }
 
 func (cluster *Cluster) MonitorVariablesDiff() {
-	if !cluster.Conf.MonitorVariableDiff || cluster.GetMaster() == nil {
+	if !cluster.Conf.MonitorVariableDiff || cluster.GetMain() == nil {
 		return
 	}
-	masterVariables := cluster.GetMaster().Variables
+	mainVariables := cluster.GetMain().Variables
 	exceptVariables := map[string]bool{
 		"PORT":                true,
 		"SERVER_ID":           true,
@@ -779,19 +779,19 @@ func (cluster *Cluster) MonitorVariablesDiff() {
 		"THREAD_POOL_SIZE":    true,
 	}
 	variablesdiff := ""
-	for k, v := range masterVariables {
+	for k, v := range mainVariables {
 
-		for _, s := range cluster.slaves {
-			slaveVariables := s.Variables
-			if slaveVariables[k] != v && exceptVariables[k] != true {
-				variablesdiff += "+ Master Variable: " + k + " -> " + v + "\n"
-				variablesdiff += "- Slave: " + s.URL + " -> " + slaveVariables[k] + "\n"
+		for _, s := range cluster.subordinates {
+			subordinateVariables := s.Variables
+			if subordinateVariables[k] != v && exceptVariables[k] != true {
+				variablesdiff += "+ Main Variable: " + k + " -> " + v + "\n"
+				variablesdiff += "- Subordinate: " + s.URL + " -> " + subordinateVariables[k] + "\n"
 			}
 
 		}
 	}
 	if variablesdiff != "" {
-		cluster.SetState("WARN0084", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["WARN0084"], variablesdiff), ErrFrom: "MON", ServerUrl: cluster.GetMaster().URL})
+		cluster.SetState("WARN0084", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["WARN0084"], variablesdiff), ErrFrom: "MON", ServerUrl: cluster.GetMain().URL})
 	}
 }
 
@@ -799,18 +799,18 @@ func (cluster *Cluster) MonitorSchema() {
 	if !cluster.Conf.MonitorSchemaChange {
 		return
 	}
-	if cluster.master == nil {
+	if cluster.main == nil {
 		return
 	}
-	if cluster.master.State == stateFailed || cluster.master.State == stateMaintenance {
+	if cluster.main.State == stateFailed || cluster.main.State == stateMaintenance {
 		return
 	}
 	cluster.sme.SetMonitorSchemaState()
-	cluster.master.Conn.SetConnMaxLifetime(3595 * time.Second)
+	cluster.main.Conn.SetConnMaxLifetime(3595 * time.Second)
 
-	tables, tablelist, logs, err := dbhelper.GetTables(cluster.master.Conn, cluster.master.DBVersion)
-	cluster.LogSQL(logs, err, cluster.master.URL, "Monitor", LvlErr, "Could not fetch master tables %s", err)
-	cluster.master.Tables = tablelist
+	tables, tablelist, logs, err := dbhelper.GetTables(cluster.main.Conn, cluster.main.DBVersion)
+	cluster.LogSQL(logs, err, cluster.main.URL, "Monitor", LvlErr, "Could not fetch main tables %s", err)
+	cluster.main.Tables = tablelist
 
 	var tableCluster []string
 	var duplicates []*ServerMonitor
@@ -822,9 +822,9 @@ func (cluster *Cluster) MonitorSchema() {
 		totindexsize += t.Index_length
 		cluster.LogPrintf(LvlDbg, "Lookup for table %s", t.Table_schema+"."+t.Table_name)
 
-		duplicates = append(duplicates, cluster.GetMaster())
+		duplicates = append(duplicates, cluster.GetMain())
 		tableCluster = append(tableCluster, cluster.GetName())
-		oldtable, err := cluster.master.GetTableFromDict(t.Table_schema + "." + t.Table_name)
+		oldtable, err := cluster.main.GetTableFromDict(t.Table_schema + "." + t.Table_name)
 		haschanged := false
 		if err != nil {
 			if err.Error() == "Empty" {
@@ -845,13 +845,13 @@ func (cluster *Cluster) MonitorSchema() {
 		for _, cl := range cluster.clusterList {
 			if cl.GetName() != cluster.GetName() {
 
-				m := cl.GetMaster()
+				m := cl.GetMain()
 				if m != nil {
 					cltbldef, _ := m.GetTableFromDict(t.Table_schema + "." + t.Table_name)
 					if cltbldef.Table_name == t.Table_name {
-						duplicates = append(duplicates, cl.GetMaster())
+						duplicates = append(duplicates, cl.GetMain())
 						tableCluster = append(tableCluster, cl.GetName())
-						cluster.LogPrintf(LvlDbg, "Found duplicate table %s in %s", t.Table_schema+"."+t.Table_name, cl.GetMaster().URL)
+						cluster.LogPrintf(LvlDbg, "Found duplicate table %s in %s", t.Table_schema+"."+t.Table_name, cl.GetMain().URL)
 					}
 				}
 			}
@@ -871,7 +871,7 @@ func (cluster *Cluster) MonitorSchema() {
 	}
 	cluster.DBIndexSize = totindexsize
 	cluster.DBTableSize = tottablesize
-	cluster.master.DictTables = tables
+	cluster.main.DictTables = tables
 	cluster.sme.RemoveMonitorSchemaState()
 }
 
@@ -914,25 +914,25 @@ func (cluster *Cluster) MonitorQueryRules() {
 }
 
 // Arbitration Only works for GTID now need crash info fetch from arbitrator to do better
-func (cluster *Cluster) LostArbitration(realmasterurl string) {
+func (cluster *Cluster) LostArbitration(realmainurl string) {
 
-	//need to join real master via change master
-	realmaster := cluster.GetServerFromURL(realmasterurl)
-	if realmaster == nil {
-		cluster.LogPrintf("ERROR", "Can't found elected master from server list on lost arbitration")
+	//need to join real main via change main
+	realmain := cluster.GetServerFromURL(realmainurl)
+	if realmain == nil {
+		cluster.LogPrintf("ERROR", "Can't found elected main from server list on lost arbitration")
 		return
 	}
-	if cluster.Conf.ArbitrationFailedMasterScript != "" {
-		cluster.LogPrintf(LvlInfo, "Calling abitration failed for master script")
-		out, err := exec.Command(cluster.Conf.ArbitrationFailedMasterScript, cluster.master.Host, cluster.master.Port).CombinedOutput()
+	if cluster.Conf.ArbitrationFailedMainScript != "" {
+		cluster.LogPrintf(LvlInfo, "Calling abitration failed for main script")
+		out, err := exec.Command(cluster.Conf.ArbitrationFailedMainScript, cluster.main.Host, cluster.main.Port).CombinedOutput()
 		if err != nil {
 			cluster.LogPrintf(LvlErr, "%s", err)
 		}
-		cluster.LogPrintf(LvlInfo, "Arbitration failed master script complete: %s", string(out))
+		cluster.LogPrintf(LvlInfo, "Arbitration failed main script complete: %s", string(out))
 	} else {
-		cluster.LogPrintf(LvlInfo, "Arbitration failed attaching failed master %s to electected master :%s", cluster.GetMaster().URL, realmaster.URL)
-		logs, err := cluster.GetMaster().SetReplicationGTIDCurrentPosFromServer(realmaster)
-		cluster.LogSQL(logs, err, realmaster.URL, "Arbitration", LvlErr, "Failed in GTID rejoin lost master to winner master %s", err)
+		cluster.LogPrintf(LvlInfo, "Arbitration failed attaching failed main %s to electected main :%s", cluster.GetMain().URL, realmain.URL)
+		logs, err := cluster.GetMain().SetReplicationGTIDCurrentPosFromServer(realmain)
+		cluster.LogSQL(logs, err, realmain.URL, "Arbitration", LvlErr, "Failed in GTID rejoin lost main to winner main %s", err)
 
 	}
 }
@@ -978,20 +978,20 @@ func (cluster *Cluster) LoadPrxModules() {
 
 func (cluster *Cluster) ConfigDiscovery() error {
 
-	if cluster.master == nil {
-		return errors.New("No master in topology")
+	if cluster.main == nil {
+		return errors.New("No main in topology")
 	}
-	innodbmem, err := strconv.ParseUint(cluster.master.Variables["INNODB_BUFFER_POOL_SIZE"], 10, 64)
+	innodbmem, err := strconv.ParseUint(cluster.main.Variables["INNODB_BUFFER_POOL_SIZE"], 10, 64)
 	if err != nil {
 		return err
 	}
 	totalmem := innodbmem
-	myisammem, err := strconv.ParseUint(cluster.master.Variables["KEY_BUFFER_SIZE"], 10, 64)
+	myisammem, err := strconv.ParseUint(cluster.main.Variables["KEY_BUFFER_SIZE"], 10, 64)
 	if err != nil {
 		return err
 	}
 	totalmem += myisammem
-	qcmem, err := strconv.ParseUint(cluster.master.Variables["QUERY_CACHE_SIZE"], 10, 64)
+	qcmem, err := strconv.ParseUint(cluster.main.Variables["QUERY_CACHE_SIZE"], 10, 64)
 	if err != nil {
 		return err
 	}
@@ -1000,26 +1000,26 @@ func (cluster *Cluster) ConfigDiscovery() error {
 	}
 	totalmem += qcmem
 	ariamem := uint64(0)
-	if _, ok := cluster.master.Variables["ARIA_PAGECACHE_BUFFER_SIZE"]; ok {
-		ariamem, err = strconv.ParseUint(cluster.master.Variables["ARIA_PAGECACHE_BUFFER_SIZE"], 10, 64)
+	if _, ok := cluster.main.Variables["ARIA_PAGECACHE_BUFFER_SIZE"]; ok {
+		ariamem, err = strconv.ParseUint(cluster.main.Variables["ARIA_PAGECACHE_BUFFER_SIZE"], 10, 64)
 		if err != nil {
 			return err
 		}
 		totalmem += ariamem
 	}
 	tokumem := uint64(0)
-	if _, ok := cluster.master.Variables["TOKUDB_CACHE_SIZE"]; ok {
+	if _, ok := cluster.main.Variables["TOKUDB_CACHE_SIZE"]; ok {
 		cluster.AddDBTag("tokudb")
-		tokumem, err = strconv.ParseUint(cluster.master.Variables["TOKUDB_CACHE_SIZE"], 10, 64)
+		tokumem, err = strconv.ParseUint(cluster.main.Variables["TOKUDB_CACHE_SIZE"], 10, 64)
 		if err != nil {
 			return err
 		}
 		totalmem += tokumem
 	}
 	s3mem := uint64(0)
-	if _, ok := cluster.master.Variables["S3_PAGECACHE_BUFFER_SIZE"]; ok {
+	if _, ok := cluster.main.Variables["S3_PAGECACHE_BUFFER_SIZE"]; ok {
 		cluster.AddDBTag("s3")
-		tokumem, err = strconv.ParseUint(cluster.master.Variables["S3_PAGECACHE_BUFFER_SIZE"], 10, 64)
+		tokumem, err = strconv.ParseUint(cluster.main.Variables["S3_PAGECACHE_BUFFER_SIZE"], 10, 64)
 		if err != nil {
 			return err
 		}
@@ -1027,9 +1027,9 @@ func (cluster *Cluster) ConfigDiscovery() error {
 	}
 
 	rocksmem := uint64(0)
-	if _, ok := cluster.master.Variables["ROCKSDB_BLOCK_CACHE_SIZE"]; ok {
+	if _, ok := cluster.main.Variables["ROCKSDB_BLOCK_CACHE_SIZE"]; ok {
 		cluster.AddDBTag("myrocks")
-		tokumem, err = strconv.ParseUint(cluster.master.Variables["ROCKSDB_BLOCK_CACHE_SIZE"], 10, 64)
+		tokumem, err = strconv.ParseUint(cluster.main.Variables["ROCKSDB_BLOCK_CACHE_SIZE"], 10, 64)
 		if err != nil {
 			return err
 		}
@@ -1039,167 +1039,167 @@ func (cluster *Cluster) ConfigDiscovery() error {
 	sharedmempcts, _ := cluster.Conf.GetMemoryPctShared()
 	totalmem = totalmem + totalmem*uint64(sharedmempcts["threads"])/100
 	cluster.SetDBMemorySize(strconv.FormatUint((totalmem / 1024 / 1024), 10))
-	cluster.SetDBCores(cluster.master.Variables["THREAD_POOL_SIZE"])
+	cluster.SetDBCores(cluster.main.Variables["THREAD_POOL_SIZE"])
 
-	if cluster.master.Variables["INNODB_DOUBLEWRITE"] == "OFF" {
+	if cluster.main.Variables["INNODB_DOUBLEWRITE"] == "OFF" {
 		cluster.AddDBTag("nodoublewrite")
 	}
-	if cluster.master.Variables["INNODB_FLUSH_LOG_AT_TRX_COMMIT"] != "1" && cluster.master.Variables["SYNC_BINLOG"] != "1" {
+	if cluster.main.Variables["INNODB_FLUSH_LOG_AT_TRX_COMMIT"] != "1" && cluster.main.Variables["SYNC_BINLOG"] != "1" {
 		cluster.AddDBTag("nodurable")
 	}
-	if cluster.master.Variables["INNODB_FLUSH_METHOD"] != "O_DIRECT" {
+	if cluster.main.Variables["INNODB_FLUSH_METHOD"] != "O_DIRECT" {
 		cluster.AddDBTag("noodirect")
 	}
-	if cluster.master.Variables["LOG_BIN_COMPRESS"] == "ON" {
+	if cluster.main.Variables["LOG_BIN_COMPRESS"] == "ON" {
 		cluster.AddDBTag("compressbinlog")
 	}
-	if cluster.master.Variables["INNODB_DEFRAGMENT"] == "ON" {
+	if cluster.main.Variables["INNODB_DEFRAGMENT"] == "ON" {
 		cluster.AddDBTag("autodefrag")
 	}
-	if cluster.master.Variables["INNODB_COMPRESSION_DEFAULT"] == "ON" {
+	if cluster.main.Variables["INNODB_COMPRESSION_DEFAULT"] == "ON" {
 		cluster.AddDBTag("compresstable")
 	}
 
-	if cluster.master.HasInstallPlugin("BLACKHOLE") {
+	if cluster.main.HasInstallPlugin("BLACKHOLE") {
 		cluster.AddDBTag("blackhole")
 	}
-	if cluster.master.HasInstallPlugin("QUERY_RESPONSE_TIME") {
+	if cluster.main.HasInstallPlugin("QUERY_RESPONSE_TIME") {
 		cluster.AddDBTag("userstats")
 	}
-	if cluster.master.HasInstallPlugin("SQL_ERROR_LOG") {
+	if cluster.main.HasInstallPlugin("SQL_ERROR_LOG") {
 		cluster.AddDBTag("sqlerror")
 	}
-	if cluster.master.HasInstallPlugin("METADATA_LOCK_INFO") {
+	if cluster.main.HasInstallPlugin("METADATA_LOCK_INFO") {
 		cluster.AddDBTag("metadatalocks")
 	}
-	if cluster.master.HasInstallPlugin("SERVER_AUDIT") {
+	if cluster.main.HasInstallPlugin("SERVER_AUDIT") {
 		cluster.AddDBTag("audit")
 	}
-	if cluster.master.Variables["SLOW_QUERY_LOG"] == "ON" {
+	if cluster.main.Variables["SLOW_QUERY_LOG"] == "ON" {
 		cluster.AddDBTag("slow")
 	}
-	if cluster.master.Variables["GENERAL_LOG"] == "ON" {
+	if cluster.main.Variables["GENERAL_LOG"] == "ON" {
 		cluster.AddDBTag("general")
 	}
-	if cluster.master.Variables["PERFORMANCE_SCHEMA"] == "ON" {
+	if cluster.main.Variables["PERFORMANCE_SCHEMA"] == "ON" {
 		cluster.AddDBTag("pfs")
 	}
-	if cluster.master.Variables["LOG_OUTPUT"] == "TABLE" {
+	if cluster.main.Variables["LOG_OUTPUT"] == "TABLE" {
 		cluster.AddDBTag("logtotable")
 	}
 
-	if cluster.master.HasInstallPlugin("CONNECT") {
+	if cluster.main.HasInstallPlugin("CONNECT") {
 		cluster.AddDBTag("connect")
 	}
-	if cluster.master.HasInstallPlugin("SPIDER") {
+	if cluster.main.HasInstallPlugin("SPIDER") {
 		cluster.AddDBTag("spider")
 	}
-	if cluster.master.HasInstallPlugin("SPHINX") {
+	if cluster.main.HasInstallPlugin("SPHINX") {
 		cluster.AddDBTag("sphinx")
 	}
-	if cluster.master.HasInstallPlugin("MROONGA") {
+	if cluster.main.HasInstallPlugin("MROONGA") {
 		cluster.AddDBTag("mroonga")
 	}
-	if cluster.master.HasWsrep() {
+	if cluster.main.HasWsrep() {
 		cluster.AddDBTag("wsrep")
 	}
 	//missing in compliance
-	if cluster.master.HasInstallPlugin("ARCHIVE") {
+	if cluster.main.HasInstallPlugin("ARCHIVE") {
 		cluster.AddDBTag("archive")
 	}
 
-	if cluster.master.HasInstallPlugin("CRACKLIB_PASSWORD_CHECK") {
+	if cluster.main.HasInstallPlugin("CRACKLIB_PASSWORD_CHECK") {
 		cluster.AddDBTag("pwdcheckcracklib")
 	}
-	if cluster.master.HasInstallPlugin("SIMPLE_PASSWORD_CHECK") {
+	if cluster.main.HasInstallPlugin("SIMPLE_PASSWORD_CHECK") {
 		cluster.AddDBTag("pwdchecksimple")
 	}
 
-	if cluster.master.Variables["LOCAL_INFILE"] == "ON" {
+	if cluster.main.Variables["LOCAL_INFILE"] == "ON" {
 		cluster.AddDBTag("localinfile")
 	}
-	if cluster.master.Variables["SKIP_NAME_RESOLVE"] == "OFF" {
+	if cluster.main.Variables["SKIP_NAME_RESOLVE"] == "OFF" {
 		cluster.AddDBTag("resolvdns")
 	}
-	if cluster.master.Variables["READ_ONLY"] == "ON" {
+	if cluster.main.Variables["READ_ONLY"] == "ON" {
 		cluster.AddDBTag("readonly")
 	}
-	if cluster.master.Variables["HAVE_SSL"] == "YES" {
+	if cluster.main.Variables["HAVE_SSL"] == "YES" {
 		cluster.AddDBTag("ssl")
 	}
 
-	if cluster.master.Variables["BINLOG_FORMAT"] == "STATEMENT" {
+	if cluster.main.Variables["BINLOG_FORMAT"] == "STATEMENT" {
 		cluster.AddDBTag("statement")
 	}
-	if cluster.master.Variables["BINLOG_FORMAT"] == "ROW" {
+	if cluster.main.Variables["BINLOG_FORMAT"] == "ROW" {
 		cluster.AddDBTag("row")
 	}
-	if cluster.master.Variables["LOG_BIN"] == "OFF" {
+	if cluster.main.Variables["LOG_BIN"] == "OFF" {
 		cluster.AddDBTag("nobinlog")
 	}
-	if cluster.master.Variables["LOG_BIN"] == "OFF" {
+	if cluster.main.Variables["LOG_BIN"] == "OFF" {
 		cluster.AddDBTag("nobinlog")
 	}
-	if cluster.master.Variables["LOG_SLAVE_UPDATES"] == "OFF" {
-		cluster.AddDBTag("nologslaveupdates")
+	if cluster.main.Variables["LOG_SLAVE_UPDATES"] == "OFF" {
+		cluster.AddDBTag("nologsubordinateupdates")
 	}
-	if cluster.master.Variables["RPL_SEMI_SYNC_MASTER_ENABLED"] == "ON" {
+	if cluster.main.Variables["RPL_SEMI_SYNC_MASTER_ENABLED"] == "ON" {
 		cluster.AddDBTag("semisync")
 	}
-	if cluster.master.Variables["GTID_STRICT_MODE"] == "ON" {
+	if cluster.main.Variables["GTID_STRICT_MODE"] == "ON" {
 		cluster.AddDBTag("gtidstrict")
 	}
-	if strings.Contains(cluster.master.Variables["SLAVE_TYPE_COVERSIONS"], "ALL_NON_LOSSY") || strings.Contains(cluster.master.Variables["SLAVE_TYPE_COVERSIONS"], "ALL_LOSSY") {
+	if strings.Contains(cluster.main.Variables["SLAVE_TYPE_COVERSIONS"], "ALL_NON_LOSSY") || strings.Contains(cluster.main.Variables["SLAVE_TYPE_COVERSIONS"], "ALL_LOSSY") {
 		cluster.AddDBTag("lossyconv")
 	}
-	if cluster.master.Variables["SLAVE_EXEC_MODE"] == "IDEMPOTENT" {
+	if cluster.main.Variables["SLAVE_EXEC_MODE"] == "IDEMPOTENT" {
 		cluster.AddDBTag("idempotent")
 	}
 
 	//missing in compliance
-	if strings.Contains(cluster.master.Variables["OPTIMIZER_SWITCH"], "SUBQUERY_CACHE=ON") {
+	if strings.Contains(cluster.main.Variables["OPTIMIZER_SWITCH"], "SUBQUERY_CACHE=ON") {
 		cluster.AddDBTag("subquerycache")
 	}
-	if strings.Contains(cluster.master.Variables["OPTIMIZER_SWITCH"], "SEMIJOIN_WITH_CACHE=ON") {
+	if strings.Contains(cluster.main.Variables["OPTIMIZER_SWITCH"], "SEMIJOIN_WITH_CACHE=ON") {
 		cluster.AddDBTag("semijoincache")
 	}
-	if strings.Contains(cluster.master.Variables["OPTIMIZER_SWITCH"], "FIRSTMATCH=ON") {
+	if strings.Contains(cluster.main.Variables["OPTIMIZER_SWITCH"], "FIRSTMATCH=ON") {
 		cluster.AddDBTag("firstmatch")
 	}
-	if strings.Contains(cluster.master.Variables["OPTIMIZER_SWITCH"], "EXTENDED_KEYS=ON") {
+	if strings.Contains(cluster.main.Variables["OPTIMIZER_SWITCH"], "EXTENDED_KEYS=ON") {
 		cluster.AddDBTag("extendedkeys")
 	}
-	if strings.Contains(cluster.master.Variables["OPTIMIZER_SWITCH"], "LOOSESCAN=ON") {
+	if strings.Contains(cluster.main.Variables["OPTIMIZER_SWITCH"], "LOOSESCAN=ON") {
 		cluster.AddDBTag("loosescan")
 	}
-	if strings.Contains(cluster.master.Variables["OPTIMIZER_SWITCH"], "INDEX_CONDITION_PUSHDOWN=OFF") {
+	if strings.Contains(cluster.main.Variables["OPTIMIZER_SWITCH"], "INDEX_CONDITION_PUSHDOWN=OFF") {
 		cluster.AddDBTag("noicp")
 	}
-	if strings.Contains(cluster.master.Variables["OPTIMIZER_SWITCH"], "IN_TO_EXISTS=OFF") {
+	if strings.Contains(cluster.main.Variables["OPTIMIZER_SWITCH"], "IN_TO_EXISTS=OFF") {
 		cluster.AddDBTag("nointoexists")
 	}
-	if strings.Contains(cluster.master.Variables["OPTIMIZER_SWITCH"], "DERIVED_MERGE=OFF") {
+	if strings.Contains(cluster.main.Variables["OPTIMIZER_SWITCH"], "DERIVED_MERGE=OFF") {
 		cluster.AddDBTag("noderivedmerge")
 	}
-	if strings.Contains(cluster.master.Variables["OPTIMIZER_SWITCH"], "DERIVED_WITH_KEYS=OFF") {
+	if strings.Contains(cluster.main.Variables["OPTIMIZER_SWITCH"], "DERIVED_WITH_KEYS=OFF") {
 		cluster.AddDBTag("noderivedwithkeys")
 	}
-	if strings.Contains(cluster.master.Variables["OPTIMIZER_SWITCH"], "MRR=OFF") {
+	if strings.Contains(cluster.main.Variables["OPTIMIZER_SWITCH"], "MRR=OFF") {
 		cluster.AddDBTag("nomrr")
 	}
-	if strings.Contains(cluster.master.Variables["OPTIMIZER_SWITCH"], "OUTER_JOIN_WITH_CACHE=OFF") {
+	if strings.Contains(cluster.main.Variables["OPTIMIZER_SWITCH"], "OUTER_JOIN_WITH_CACHE=OFF") {
 		cluster.AddDBTag("noouterjoincache")
 	}
-	if strings.Contains(cluster.master.Variables["OPTIMIZER_SWITCH"], "SEMI_JOIN_WITH_CACHE=OFF") {
+	if strings.Contains(cluster.main.Variables["OPTIMIZER_SWITCH"], "SEMI_JOIN_WITH_CACHE=OFF") {
 		cluster.AddDBTag("nosemijoincache")
 	}
-	if strings.Contains(cluster.master.Variables["OPTIMIZER_SWITCH"], "TABLE_ELIMINATION=OFF") {
+	if strings.Contains(cluster.main.Variables["OPTIMIZER_SWITCH"], "TABLE_ELIMINATION=OFF") {
 		cluster.AddDBTag("notableelimination")
 	}
-	if strings.Contains(cluster.master.Variables["SQL_MODE"], "ORACLE") {
+	if strings.Contains(cluster.main.Variables["SQL_MODE"], "ORACLE") {
 		cluster.AddDBTag("sqlmodeoracle")
 	}
-	if cluster.master.Variables["SQL_MODE"] == "" {
+	if cluster.main.Variables["SQL_MODE"] == "" {
 		cluster.AddDBTag("sqlmodeunstrict")
 	}
 	//index_merge=on
@@ -1225,74 +1225,74 @@ func (cluster *Cluster) ConfigDiscovery() error {
 	//rowid_filter=on
 	//condition_pushdown_from_having=on
 
-	if cluster.master.Variables["TX_ISOLATION"] == "READ-COMMITTED" {
+	if cluster.main.Variables["TX_ISOLATION"] == "READ-COMMITTED" {
 		cluster.AddDBTag("readcommitted")
 	}
 	//missing
-	if cluster.master.Variables["TX_ISOLATION"] == "READ-UNCOMMITTED" {
+	if cluster.main.Variables["TX_ISOLATION"] == "READ-UNCOMMITTED" {
 		cluster.AddDBTag("readuncommitted")
 	}
-	if cluster.master.Variables["TX_ISOLATION"] == "REPEATABLE-READ" {
+	if cluster.main.Variables["TX_ISOLATION"] == "REPEATABLE-READ" {
 		cluster.AddDBTag("reapeatableread")
 	}
-	if cluster.master.Variables["TX_ISOLATION"] == "SERIALIZED" {
+	if cluster.main.Variables["TX_ISOLATION"] == "SERIALIZED" {
 		cluster.AddDBTag("serialized")
 	}
 
-	if cluster.master.Variables["JOIN_CACHE_LEVEL"] == "8" {
+	if cluster.main.Variables["JOIN_CACHE_LEVEL"] == "8" {
 		cluster.AddDBTag("hashjoin")
 	}
-	if cluster.master.Variables["JOIN_CACHE_LEVEL"] == "6" {
+	if cluster.main.Variables["JOIN_CACHE_LEVEL"] == "6" {
 		cluster.AddDBTag("mrrjoin")
 	}
-	if cluster.master.Variables["JOIN_CACHE_LEVEL"] == "2" {
+	if cluster.main.Variables["JOIN_CACHE_LEVEL"] == "2" {
 		cluster.AddDBTag("nestedjoin")
 	}
-	if cluster.master.Variables["LOWER_CASE_TABLE_NAMES"] == "1" {
+	if cluster.main.Variables["LOWER_CASE_TABLE_NAMES"] == "1" {
 		cluster.AddDBTag("lowercasetable")
 	}
-	if cluster.master.Variables["USER_STAT_TABLES"] == "PREFERABLY_FOR_QUERIES" {
+	if cluster.main.Variables["USER_STAT_TABLES"] == "PREFERABLY_FOR_QUERIES" {
 		cluster.AddDBTag("eits")
 	}
 
-	if cluster.master.Variables["CHARACTER_SET_SERVER"] == "UTF8MB4" {
-		if strings.Contains(cluster.master.Variables["COLLATION_SERVER"], "_ci") {
+	if cluster.main.Variables["CHARACTER_SET_SERVER"] == "UTF8MB4" {
+		if strings.Contains(cluster.main.Variables["COLLATION_SERVER"], "_ci") {
 			cluster.AddDBTag("bm4ci")
 		} else {
 			cluster.AddDBTag("bm4cs")
 		}
 	}
-	if cluster.master.Variables["CHARACTER_SET_SERVER"] == "UTF8" {
-		if strings.Contains(cluster.master.Variables["COLLATION_SERVER"], "_ci") {
+	if cluster.main.Variables["CHARACTER_SET_SERVER"] == "UTF8" {
+		if strings.Contains(cluster.main.Variables["COLLATION_SERVER"], "_ci") {
 			cluster.AddDBTag("utf8ci")
 		} else {
 			cluster.AddDBTag("utf8cs")
 		}
 	}
 
-	//slave_parallel_mode = optimistic
+	//subordinate_parallel_mode = optimistic
 	/*
 
-		tmpmem, err := strconv.ParseUint(cluster.master.Variables["TMP_TABLE_SIZE"], 10, 64)
+		tmpmem, err := strconv.ParseUint(cluster.main.Variables["TMP_TABLE_SIZE"], 10, 64)
 		if err != nil {
 			return err
 		}
-			qttmp, err := strconv.ParseUint(cluster.master.Variables["MAX_TMP_TABLES"], 10, 64)
+			qttmp, err := strconv.ParseUint(cluster.main.Variables["MAX_TMP_TABLES"], 10, 64)
 			if err != nil {
 				return err
 			}
 			tmpmem = tmpmem * qttmp
 			totalmem += tmpmem
 
-			cores, err := strconv.ParseUint(cluster.master.Variables["THREAD_POOL_SIZE"], 10, 64)
+			cores, err := strconv.ParseUint(cluster.main.Variables["THREAD_POOL_SIZE"], 10, 64)
 			if err != nil {
 				return err
 			}
 
-			joinmem, err := strconv.ParseUint(cluster.master.Variables["JOIN_BUFFER_SPACE_LIMIT"], 10, 64)
+			joinmem, err := strconv.ParseUint(cluster.main.Variables["JOIN_BUFFER_SPACE_LIMIT"], 10, 64)
 			joinmem = joinmem * cores
 
-			sortmem, err := strconv.ParseUint(cluster.master.Variables["SORT_BUFFER_SIZE"], 10, 64)
+			sortmem, err := strconv.ParseUint(cluster.main.Variables["SORT_BUFFER_SIZE"], 10, 64)
 	*/
 	//
 	//	containermem = containermem * int64(sharedmempcts["innodb"]) / 100

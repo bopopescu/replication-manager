@@ -6,7 +6,7 @@
 
 package cluster
 
-func (cluster *Cluster) initGoBetween(oldmaster *ServerMonitor, proxy *Proxy) {
+func (cluster *Cluster) initGoBetween(oldmain *ServerMonitor, proxy *Proxy) {
 
 }
 

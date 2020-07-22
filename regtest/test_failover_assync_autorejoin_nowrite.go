@@ -22,19 +22,19 @@ func testFailoverAssyncAutoRejoinNowrites(cluster *cluster.Cluster, conf string,
 	cluster.SetRejoinFlashback(false)
 	cluster.SetRejoinDump(false)
 	cluster.DisableSemisync()
-	SaveMasterURL := cluster.GetMaster().URL
-	SaveMaster := cluster.GetMaster()
+	SaveMainURL := cluster.GetMain().URL
+	SaveMain := cluster.GetMain()
 
 	time.Sleep(4 * time.Second)
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
 	go cluster.WaitFailover(wg)
-	cluster.StopDatabaseService(cluster.GetMaster())
+	cluster.StopDatabaseService(cluster.GetMain())
 	wg.Wait()
 	/// give time to start the failover
 
-	if cluster.GetMaster().URL == SaveMasterURL {
-		cluster.LogPrintf("TEST", " Old master %s ==  Next master %s  ", SaveMasterURL, cluster.GetMaster().URL)
+	if cluster.GetMain().URL == SaveMainURL {
+		cluster.LogPrintf("TEST", " Old main %s ==  Next main %s  ", SaveMainURL, cluster.GetMain().URL)
 
 		return false
 	}
@@ -42,17 +42,17 @@ func testFailoverAssyncAutoRejoinNowrites(cluster *cluster.Cluster, conf string,
 	wg2 := new(sync.WaitGroup)
 	wg2.Add(1)
 	go cluster.WaitRejoin(wg2)
-	cluster.StartDatabaseService(SaveMaster)
+	cluster.StartDatabaseService(SaveMain)
 	wg2.Wait()
 	//Wait for replication recovery
 	time.Sleep(2 * time.Second)
 	if cluster.CheckTableConsistency("test.sbtest") != true {
-		cluster.LogPrintf(LvlErr, "Inconsitant slave")
+		cluster.LogPrintf(LvlErr, "Inconsitant subordinate")
 
 		return false
 	}
 
-	if cluster.CheckSlavesRunning() == false {
+	if cluster.CheckSubordinatesRunning() == false {
 		cluster.LogPrintf(LvlErr, "Replication issue")
 
 		return false

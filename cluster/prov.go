@@ -35,7 +35,7 @@ func (cluster *Cluster) Bootstrap() error {
 	}
 	if cluster.Conf.Test {
 		cluster.initProxies()
-		err = cluster.WaitProxyEqualMaster()
+		err = cluster.WaitProxyEqualMain()
 		if err != nil {
 			return err
 		}
@@ -44,8 +44,8 @@ func (cluster *Cluster) Bootstrap() error {
 			return err
 		}
 
-		if cluster.GetMaster() == nil {
-			return errors.New("Abording test, no master found")
+		if cluster.GetMain() == nil {
+			return errors.New("Abording test, no main found")
 		}
 		err = cluster.InitBenchTable()
 		if err != nil {
@@ -235,9 +235,9 @@ func (cluster *Cluster) Unprovision() error {
 		}
 	}
 
-	cluster.slaves = nil
-	cluster.master = nil
-	cluster.vmaster = nil
+	cluster.subordinates = nil
+	cluster.main = nil
+	cluster.vmain = nil
 	cluster.IsAllDbUp = false
 	cluster.sme.UnDiscovered()
 	cluster.sme.RemoveFailoverState()
@@ -407,9 +407,9 @@ func (cluster *Cluster) BootstrapReplicationCleanup() error {
 			return err
 		}
 		if cluster.Conf.Verbose {
-			cluster.LogPrintf(LvlInfo, "SetDefaultMasterConn on server %s ", server.URL)
+			cluster.LogPrintf(LvlInfo, "SetDefaultMainConn on server %s ", server.URL)
 		}
-		logs, err := dbhelper.SetDefaultMasterConn(server.Conn, cluster.Conf.MasterConn, server.DBVersion)
+		logs, err := dbhelper.SetDefaultMainConn(server.Conn, cluster.Conf.MainConn, server.DBVersion)
 		cluster.LogSQL(logs, err, server.URL, "BootstrapReplicationCleanup", LvlDbg, "BootstrapReplicationCleanup %s %s ", server.URL, err)
 		if err != nil {
 			if cluster.Conf.Verbose {
@@ -418,42 +418,42 @@ func (cluster *Cluster) BootstrapReplicationCleanup() error {
 			continue
 		}
 
-		cluster.LogPrintf(LvlInfo, "Reset Master on server %s ", server.URL)
+		cluster.LogPrintf(LvlInfo, "Reset Main on server %s ", server.URL)
 
-		logs, err = dbhelper.ResetMaster(server.Conn, cluster.Conf.MasterConn, server.DBVersion)
-		cluster.LogSQL(logs, err, server.URL, "BootstrapReplicationCleanup", LvlErr, "Reset Master on server %s %s", server.URL, err)
+		logs, err = dbhelper.ResetMain(server.Conn, cluster.Conf.MainConn, server.DBVersion)
+		cluster.LogSQL(logs, err, server.URL, "BootstrapReplicationCleanup", LvlErr, "Reset Main on server %s %s", server.URL, err)
 		if cluster.Conf.Verbose {
-			cluster.LogPrintf(LvlInfo, "Stop all slaves or stop slave %s ", server.URL)
+			cluster.LogPrintf(LvlInfo, "Stop all subordinates or stop subordinate %s ", server.URL)
 		}
 		if server.DBVersion.IsMariaDB() {
-			logs, err = dbhelper.StopAllSlaves(server.Conn, server.DBVersion)
+			logs, err = dbhelper.StopAllSubordinates(server.Conn, server.DBVersion)
 		} else {
-			logs, err = server.StopSlave()
+			logs, err = server.StopSubordinate()
 		}
-		cluster.LogSQL(logs, err, server.URL, "BootstrapReplicationCleanup", LvlErr, "Stop all slaves or just slave %s %s", server.URL, err)
+		cluster.LogSQL(logs, err, server.URL, "BootstrapReplicationCleanup", LvlErr, "Stop all subordinates or just subordinate %s %s", server.URL, err)
 
 		if server.DBVersion.IsMariaDB() {
 			if cluster.Conf.Verbose {
-				cluster.LogPrintf(LvlInfo, "SET GLOBAL gtid_slave_pos='' on %s", server.URL)
+				cluster.LogPrintf(LvlInfo, "SET GLOBAL gtid_subordinate_pos='' on %s", server.URL)
 			}
-			logs, err := dbhelper.SetGTIDSlavePos(server.Conn, "")
-			cluster.LogSQL(logs, err, server.URL, "BootstrapReplicationCleanup", LvlErr, "Can reset GTID slave pos %s %s", server.URL, err)
+			logs, err := dbhelper.SetGTIDSubordinatePos(server.Conn, "")
+			cluster.LogSQL(logs, err, server.URL, "BootstrapReplicationCleanup", LvlErr, "Can reset GTID subordinate pos %s %s", server.URL, err)
 		}
 
 	}
-	cluster.master = nil
-	cluster.vmaster = nil
-	cluster.slaves = nil
+	cluster.main = nil
+	cluster.vmain = nil
+	cluster.subordinates = nil
 	cluster.sme.RemoveFailoverState()
 	return nil
 }
 
 func (cluster *Cluster) BootstrapReplication(clean bool) error {
 
-	// default to master slave
+	// default to main subordinate
 	var err error
 
-	if cluster.Conf.MultiMasterWsrep {
+	if cluster.Conf.MultiMainWsrep {
 		cluster.LogPrintf(LvlInfo, "Galera cluster ignoring replication setup")
 		return nil
 	}
@@ -475,13 +475,13 @@ func (cluster *Cluster) BootstrapReplication(clean bool) error {
 	err = cluster.TopologyDiscover(wg)
 	wg.Wait()
 	if err == nil {
-		return errors.New("Environment already has an existing master/slave setup")
+		return errors.New("Environment already has an existing main/subordinate setup")
 	}
 
 	cluster.sme.SetFailoverState()
-	masterKey := 0
-	if cluster.Conf.PrefMaster != "" {
-		masterKey = func() int {
+	mainKey := 0
+	if cluster.Conf.PrefMain != "" {
+		mainKey = func() int {
 			for k, server := range cluster.Servers {
 				if server.IsPrefered() {
 					cluster.sme.RemoveFailoverState()
@@ -492,23 +492,23 @@ func (cluster *Cluster) BootstrapReplication(clean bool) error {
 			return -1
 		}()
 	}
-	if masterKey == -1 {
-		return errors.New("Preferred master could not be found in existing servers")
+	if mainKey == -1 {
+		return errors.New("Preferred main could not be found in existing servers")
 	}
 
-	// Assume master-slave if nothing else is declared
-	if cluster.Conf.MultiMasterRing == false && cluster.Conf.MultiMaster == false && cluster.Conf.MxsBinlogOn == false && cluster.Conf.MultiTierSlave == false {
+	// Assume main-subordinate if nothing else is declared
+	if cluster.Conf.MultiMainRing == false && cluster.Conf.MultiMain == false && cluster.Conf.MxsBinlogOn == false && cluster.Conf.MultiTierSubordinate == false {
 
 		for key, server := range cluster.Servers {
 			if server.State == stateFailed {
 				continue
 			}
-			if key == masterKey {
+			if key == mainKey {
 				dbhelper.FlushTables(server.Conn)
 				server.SetReadWrite()
 				continue
 			} else {
-				err = server.ChangeMasterTo(cluster.Servers[masterKey], "SLAVE_POS")
+				err = server.ChangeMainTo(cluster.Servers[mainKey], "SLAVE_POS")
 				if !server.ClusterGroup.IsInIgnoredReadonly(server) {
 					server.SetReadOnly()
 				}
@@ -516,31 +516,31 @@ func (cluster *Cluster) BootstrapReplication(clean bool) error {
 
 		}
 	}
-	// Slave Relay
-	if cluster.Conf.MultiTierSlave == true {
-		masterKey = 0
+	// Subordinate Relay
+	if cluster.Conf.MultiTierSubordinate == true {
+		mainKey = 0
 		relaykey := 1
 		for key, server := range cluster.Servers {
 			if server.State == stateFailed {
 				continue
 			}
-			if key == masterKey {
+			if key == mainKey {
 				dbhelper.FlushTables(server.Conn)
 				server.SetReadWrite()
 				continue
 			} else {
-				dbhelper.StopAllSlaves(server.Conn, server.DBVersion)
-				dbhelper.ResetAllSlaves(server.Conn, server.DBVersion)
+				dbhelper.StopAllSubordinates(server.Conn, server.DBVersion)
+				dbhelper.ResetAllSubordinates(server.Conn, server.DBVersion)
 
 				if relaykey == key {
-					err = server.ChangeMasterTo(cluster.Servers[masterKey], "CURRENT_POS")
+					err = server.ChangeMainTo(cluster.Servers[mainKey], "CURRENT_POS")
 					if err != nil {
 						cluster.sme.RemoveFailoverState()
 						return err
 					}
 
 				} else {
-					err = server.ChangeMasterTo(cluster.Servers[relaykey], "CURRENT_POS")
+					err = server.ChangeMainTo(cluster.Servers[relaykey], "CURRENT_POS")
 					if err != nil {
 						cluster.sme.RemoveFailoverState()
 						return err
@@ -551,16 +551,16 @@ func (cluster *Cluster) BootstrapReplication(clean bool) error {
 				}
 			}
 		}
-		cluster.LogPrintf(LvlInfo, "Environment bootstrapped with %s as master", cluster.Servers[masterKey].URL)
+		cluster.LogPrintf(LvlInfo, "Environment bootstrapped with %s as main", cluster.Servers[mainKey].URL)
 	}
-	// Multi Master
-	if cluster.Conf.MultiMaster == true {
+	// Multi Main
+	if cluster.Conf.MultiMain == true {
 		for key, server := range cluster.Servers {
 			if server.State == stateFailed {
 				continue
 			}
 			if key == 0 {
-				err = server.ChangeMasterTo(cluster.Servers[1], "CURRENT_POS")
+				err = server.ChangeMainTo(cluster.Servers[1], "CURRENT_POS")
 				if err != nil {
 					cluster.sme.RemoveFailoverState()
 					return err
@@ -570,7 +570,7 @@ func (cluster *Cluster) BootstrapReplication(clean bool) error {
 				}
 			}
 			if key == 1 {
-				err = server.ChangeMasterTo(cluster.Servers[0], "CURRENT_POS")
+				err = server.ChangeMainTo(cluster.Servers[0], "CURRENT_POS")
 				if err != nil {
 					cluster.sme.RemoveFailoverState()
 					return err
@@ -582,19 +582,19 @@ func (cluster *Cluster) BootstrapReplication(clean bool) error {
 		}
 	}
 	// Ring
-	if cluster.Conf.MultiMasterRing == true {
+	if cluster.Conf.MultiMainRing == true {
 		for key, server := range cluster.Servers {
 			if server.State == stateFailed {
 				continue
 			}
 			i := (len(cluster.Servers) + key - 1) % len(cluster.Servers)
-			err = server.ChangeMasterTo(cluster.Servers[i], "SLAVE_POS")
+			err = server.ChangeMainTo(cluster.Servers[i], "SLAVE_POS")
 			if err != nil {
 				cluster.sme.RemoveFailoverState()
 				return err
 			}
 
-			cluster.vmaster = cluster.Servers[0]
+			cluster.vmain = cluster.Servers[0]
 
 		}
 	}

@@ -26,8 +26,8 @@ func (repman *ReplicationManager) apiClusterUnprotectedHandler(router *mux.Route
 	router.Handle("/api/clusters/{clusterName}/status", negroni.New(
 		negroni.Wrap(http.HandlerFunc(repman.handlerMuxClusterStatus)),
 	))
-	router.Handle("/api/clusters/{clusterName}/actions/master-physical-backup", negroni.New(
-		negroni.Wrap(http.HandlerFunc(repman.handlerMuxClusterMasterPhysicalBackup)),
+	router.Handle("/api/clusters/{clusterName}/actions/main-physical-backup", negroni.New(
+		negroni.Wrap(http.HandlerFunc(repman.handlerMuxClusterMainPhysicalBackup)),
 	))
 
 }
@@ -233,13 +233,13 @@ func (repman *ReplicationManager) apiClusterProtectedHandler(router *mux.Router)
 		negroni.HandlerFunc(repman.validateTokenMiddleware),
 		negroni.Wrap(http.HandlerFunc(repman.handlerMuxServers)),
 	))
-	router.Handle("/api/clusters/{clusterName}/topology/master", negroni.New(
+	router.Handle("/api/clusters/{clusterName}/topology/main", negroni.New(
 		negroni.HandlerFunc(repman.validateTokenMiddleware),
-		negroni.Wrap(http.HandlerFunc(repman.handlerMuxMaster)),
+		negroni.Wrap(http.HandlerFunc(repman.handlerMuxMain)),
 	))
-	router.Handle("/api/clusters/{clusterName}/topology/slaves", negroni.New(
+	router.Handle("/api/clusters/{clusterName}/topology/subordinates", negroni.New(
 		negroni.HandlerFunc(repman.validateTokenMiddleware),
-		negroni.Wrap(http.HandlerFunc(repman.handlerMuxSlaves)),
+		negroni.Wrap(http.HandlerFunc(repman.handlerMuxSubordinates)),
 	))
 	router.Handle("/api/clusters/{clusterName}/topology/logs", negroni.New(
 		negroni.HandlerFunc(repman.validateTokenMiddleware),
@@ -312,13 +312,13 @@ func (repman *ReplicationManager) handlerMuxServers(w http.ResponseWriter, r *ht
 	}
 }
 
-func (repman *ReplicationManager) handlerMuxSlaves(w http.ResponseWriter, r *http.Request) {
+func (repman *ReplicationManager) handlerMuxSubordinates(w http.ResponseWriter, r *http.Request) {
 	//marshal unmarchal for ofuscation deep copy of struc
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	vars := mux.Vars(r)
 	mycluster := repman.getClusterByName(vars["clusterName"])
 	if mycluster != nil {
-		data, _ := json.Marshal(mycluster.GetSlaves())
+		data, _ := json.Marshal(mycluster.GetSubordinates())
 		var srvs []*cluster.ServerMonitor
 
 		err := json.Unmarshal(data, &srvs)
@@ -442,7 +442,7 @@ func (repman *ReplicationManager) handlerMuxFailover(w http.ResponseWriter, r *h
 			http.Error(w, "No valid ACL", 403)
 			return
 		}
-		mycluster.MasterFailover(true)
+		mycluster.MainFailover(true)
 	} else {
 
 		http.Error(w, "No cluster", 500)
@@ -557,50 +557,50 @@ func (repman *ReplicationManager) handlerMuxBootstrapReplication(w http.Response
 			return
 		}
 		switch vars["topology"] {
-		case "master-slave":
-			mycluster.SetMultiTierSlave(false)
-			mycluster.SetForceSlaveNoGtid(false)
-			mycluster.SetMultiMaster(false)
+		case "main-subordinate":
+			mycluster.SetMultiTierSubordinate(false)
+			mycluster.SetForceSubordinateNoGtid(false)
+			mycluster.SetMultiMain(false)
 			mycluster.SetBinlogServer(false)
-			mycluster.SetMultiMasterWsrep(false)
-		case "master-slave-no-gtid":
-			mycluster.SetMultiTierSlave(false)
-			mycluster.SetForceSlaveNoGtid(true)
-			mycluster.SetMultiMaster(false)
+			mycluster.SetMultiMainWsrep(false)
+		case "main-subordinate-no-gtid":
+			mycluster.SetMultiTierSubordinate(false)
+			mycluster.SetForceSubordinateNoGtid(true)
+			mycluster.SetMultiMain(false)
 			mycluster.SetBinlogServer(false)
-			mycluster.SetMultiMasterWsrep(false)
-		case "multi-master":
-			mycluster.SetMultiTierSlave(false)
-			mycluster.SetForceSlaveNoGtid(false)
-			mycluster.SetMultiMaster(true)
+			mycluster.SetMultiMainWsrep(false)
+		case "multi-main":
+			mycluster.SetMultiTierSubordinate(false)
+			mycluster.SetForceSubordinateNoGtid(false)
+			mycluster.SetMultiMain(true)
 			mycluster.SetBinlogServer(false)
-			mycluster.SetMultiMasterWsrep(false)
-		case "multi-tier-slave":
-			mycluster.SetMultiTierSlave(true)
-			mycluster.SetForceSlaveNoGtid(false)
-			mycluster.SetMultiMaster(false)
+			mycluster.SetMultiMainWsrep(false)
+		case "multi-tier-subordinate":
+			mycluster.SetMultiTierSubordinate(true)
+			mycluster.SetForceSubordinateNoGtid(false)
+			mycluster.SetMultiMain(false)
 			mycluster.SetBinlogServer(false)
-			mycluster.SetMultiMasterWsrep(false)
+			mycluster.SetMultiMainWsrep(false)
 		case "maxscale-binlog":
-			mycluster.SetMultiTierSlave(false)
-			mycluster.SetForceSlaveNoGtid(false)
-			mycluster.SetMultiMaster(false)
+			mycluster.SetMultiTierSubordinate(false)
+			mycluster.SetForceSubordinateNoGtid(false)
+			mycluster.SetMultiMain(false)
 			mycluster.SetBinlogServer(true)
-			mycluster.SetMultiMasterWsrep(false)
-		case "multi-master-ring":
-			mycluster.SetMultiTierSlave(false)
-			mycluster.SetForceSlaveNoGtid(false)
-			mycluster.SetMultiMaster(false)
+			mycluster.SetMultiMainWsrep(false)
+		case "multi-main-ring":
+			mycluster.SetMultiTierSubordinate(false)
+			mycluster.SetForceSubordinateNoGtid(false)
+			mycluster.SetMultiMain(false)
 			mycluster.SetBinlogServer(false)
-			mycluster.SetMultiMasterRing(true)
-			mycluster.SetMultiMasterWsrep(false)
-		case "multi-master-wsrep":
-			mycluster.SetMultiTierSlave(false)
-			mycluster.SetForceSlaveNoGtid(false)
-			mycluster.SetMultiMaster(false)
+			mycluster.SetMultiMainRing(true)
+			mycluster.SetMultiMainWsrep(false)
+		case "multi-main-wsrep":
+			mycluster.SetMultiTierSubordinate(false)
+			mycluster.SetForceSubordinateNoGtid(false)
+			mycluster.SetMultiMain(false)
 			mycluster.SetBinlogServer(false)
-			mycluster.SetMultiMasterRing(false)
-			mycluster.SetMultiMasterWsrep(true)
+			mycluster.SetMultiMainRing(false)
+			mycluster.SetMultiMainWsrep(true)
 
 		}
 		err := mycluster.BootstrapReplication(true)
@@ -757,23 +757,23 @@ func (repman *ReplicationManager) handlerMuxSwitchover(w http.ResponseWriter, r 
 			return
 		}
 		mycluster.LogPrintf(cluster.LvlInfo, "Rest API receive switchover request")
-		savedPrefMaster := mycluster.GetConf().PrefMaster
+		savedPrefMain := mycluster.GetConf().PrefMain
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		if mycluster.IsMasterFailed() {
-			mycluster.LogPrintf(cluster.LvlErr, "Master failed, cannot initiate switchover")
-			http.Error(w, "Master failed", http.StatusBadRequest)
+		if mycluster.IsMainFailed() {
+			mycluster.LogPrintf(cluster.LvlErr, "Main failed, cannot initiate switchover")
+			http.Error(w, "Main failed", http.StatusBadRequest)
 			return
 		}
 		r.ParseForm() // Parses the request body
-		newPrefMaster := r.Form.Get("prefmaster")
-		mycluster.LogPrintf(cluster.LvlInfo, "Was ask for prefered master: %s", newPrefMaster)
-		if mycluster.IsInHostList(newPrefMaster) {
-			mycluster.SetPrefMaster(newPrefMaster)
+		newPrefMain := r.Form.Get("prefmain")
+		mycluster.LogPrintf(cluster.LvlInfo, "Was ask for prefered main: %s", newPrefMain)
+		if mycluster.IsInHostList(newPrefMain) {
+			mycluster.SetPrefMain(newPrefMain)
 		} else {
-			mycluster.LogPrintf(cluster.LvlInfo, "Prefered master: not found in database servers %s", newPrefMaster)
+			mycluster.LogPrintf(cluster.LvlInfo, "Prefered main: not found in database servers %s", newPrefMain)
 		}
-		mycluster.MasterFailover(false)
-		mycluster.SetPrefMaster(savedPrefMaster)
+		mycluster.MainFailover(false)
+		mycluster.SetPrefMain(savedPrefMain)
 	} else {
 		http.Error(w, "No cluster", 500)
 		return
@@ -781,12 +781,12 @@ func (repman *ReplicationManager) handlerMuxSwitchover(w http.ResponseWriter, r 
 	return
 }
 
-func (repman *ReplicationManager) handlerMuxMaster(w http.ResponseWriter, r *http.Request) {
+func (repman *ReplicationManager) handlerMuxMain(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	vars := mux.Vars(r)
 	mycluster := repman.getClusterByName(vars["clusterName"])
 	if mycluster != nil {
-		m := mycluster.GetMaster()
+		m := mycluster.GetMain()
 		var srvs *cluster.ServerMonitor
 		if m != nil {
 
@@ -956,7 +956,7 @@ func (repman *ReplicationManager) handlerMuxSwitchSettings(w http.ResponseWriter
 		case "autorejoin-flashback-on-sync":
 			mycluster.SwitchRejoinSemisync()
 		case "autorejoin-flashback-on-unsync": //?????
-		case "autorejoin-slave-positional-heartbeat":
+		case "autorejoin-subordinate-positional-heartbeat":
 			mycluster.SwitchRejoinPseudoGTID()
 		case "autorejoin-zfs-flashback":
 			mycluster.SwitchRejoinZFSFlashback()
@@ -1011,8 +1011,8 @@ func (repman *ReplicationManager) handlerMuxSwitchSettings(w http.ResponseWriter
 			mycluster.SwitchProxysqlBootstrap()
 		case "proxysql":
 			mycluster.SwitchProxySQL()
-		case "proxy-servers-read-on-master":
-			mycluster.SwitchProxyServersReadOnMaster()
+		case "proxy-servers-read-on-main":
+			mycluster.SwitchProxyServersReadOnMain()
 		case "proxy-servers-backend-compression":
 			mycluster.SwitchProxyServersBackendCompression()
 		case "database-heartbeat":
@@ -1066,7 +1066,7 @@ func (repman *ReplicationManager) handlerMuxSetSettings(w http.ResponseWriter, r
 		switch setting {
 		case "replication-credential":
 			mycluster.SetReplicationCredential(vars["settingValue"])
-		case "failover-max-slave-delay":
+		case "failover-max-subordinate-delay":
 			val, _ := strconv.ParseInt(vars["settingValue"], 10, 64)
 			mycluster.SetRplMaxDelay(val)
 		case "switchover-wait-route-change":
@@ -1456,7 +1456,7 @@ func (repman *ReplicationManager) handlerMuxClusterStatus(w http.ResponseWriter,
 	}
 }
 
-func (repman *ReplicationManager) handlerMuxClusterMasterPhysicalBackup(w http.ResponseWriter, r *http.Request) {
+func (repman *ReplicationManager) handlerMuxClusterMainPhysicalBackup(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	vars := mux.Vars(r)
 	mycluster := repman.getClusterByName(vars["clusterName"])
@@ -1466,7 +1466,7 @@ func (repman *ReplicationManager) handlerMuxClusterMasterPhysicalBackup(w http.R
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		mycluster.GetMaster().JobBackupPhysical()
+		mycluster.GetMain().JobBackupPhysical()
 	} else {
 		w.WriteHeader(http.StatusBadRequest)
 		io.WriteString(w, "No cluster found:"+vars["clusterName"])
@@ -1734,8 +1734,8 @@ func (repman *ReplicationManager) handlerMuxClusterSchema(w http.ResponseWriter,
 		}
 		e := json.NewEncoder(w)
 		e.SetIndent("", "\t")
-		if mycluster.GetMaster() != nil {
-			err := e.Encode(mycluster.GetMaster().GetDictTables())
+		if mycluster.GetMain() != nil {
+			err := e.Encode(mycluster.GetMain().GetDictTables())
 			if err != nil {
 				http.Error(w, "Encoding error in settings", 500)
 				return

@@ -60,14 +60,14 @@ func (server *ServerMonitor) CheckReplication() string {
 			return "Galera Late"
 		}
 	}
-	if (server.IsDown()) && server.IsSlave == false {
+	if (server.IsDown()) && server.IsSubordinate == false {
 
-		return "Master OK"
+		return "Main OK"
 	}
 
-	if server.ClusterGroup.master != nil {
-		if server.ServerID == server.ClusterGroup.master.ServerID {
-			return "Master OK"
+	if server.ClusterGroup.main != nil {
+		if server.ServerID == server.ClusterGroup.main.ServerID {
+			return "Main OK"
 		}
 	}
 	if server.IsMaintenance {
@@ -75,37 +75,37 @@ func (server *ServerMonitor) CheckReplication() string {
 		return "Maintenance"
 	}
 	// when replication stopped Valid is null
-	ss, err := server.GetSlaveStatus(server.ReplicationSourceName)
+	ss, err := server.GetSubordinateStatus(server.ReplicationSourceName)
 	if err != nil {
-		return "Not a slave"
+		return "Not a subordinate"
 	}
-	if ss.SecondsBehindMaster.Valid == false {
+	if ss.SecondsBehindMain.Valid == false {
 
 		//	log.Printf("replicationCheck %s %s", server.SQLThread, server.IOThread)
-		if ss.SlaveSQLRunning.String == "Yes" && ss.SlaveIORunning.String == "No" {
+		if ss.SubordinateSQLRunning.String == "Yes" && ss.SubordinateIORunning.String == "No" {
 			if server.IsRelay == false && server.IsMaxscale == false {
-				server.State = stateSlaveErr
+				server.State = stateSubordinateErr
 			} else if server.IsRelay {
 				server.State = stateRelayErr
 			}
 			return fmt.Sprintf("NOT OK, IO Stopped (%s)", ss.LastIOErrno.String)
-		} else if ss.SlaveSQLRunning.String == "No" && ss.SlaveIORunning.String == "Yes" {
+		} else if ss.SubordinateSQLRunning.String == "No" && ss.SubordinateIORunning.String == "Yes" {
 			if server.IsRelay == false && server.IsMaxscale == false {
-				server.State = stateSlaveErr
+				server.State = stateSubordinateErr
 			} else if server.IsRelay {
 				server.State = stateRelayErr
 			}
 			return fmt.Sprintf("NOT OK, SQL Stopped (%s)", ss.LastSQLErrno.String)
-		} else if ss.SlaveSQLRunning.String == "No" && ss.SlaveIORunning.String == "No" {
+		} else if ss.SubordinateSQLRunning.String == "No" && ss.SubordinateIORunning.String == "No" {
 			if server.IsRelay == false && server.IsMaxscale == false {
-				server.State = stateSlaveErr
+				server.State = stateSubordinateErr
 			} else if server.IsRelay {
 				server.State = stateRelayErr
 			}
 			return "NOT OK, ALL Stopped"
-		} else if ss.SlaveSQLRunning.String == "Connecting" {
+		} else if ss.SubordinateSQLRunning.String == "Connecting" {
 			if server.IsRelay == false && server.IsMaxscale == false {
-				server.State = stateSlave
+				server.State = stateSubordinate
 			} else if server.IsRelay {
 				server.State = stateRelay
 			}
@@ -113,111 +113,111 @@ func (server *ServerMonitor) CheckReplication() string {
 		}
 
 		if server.IsRelay == false && server.IsMaxscale == false {
-			server.State = stateSlave
+			server.State = stateSubordinate
 		} else if server.IsRelay {
 			server.State = stateRelay
 		}
 		return "Running OK"
 	}
 
-	if ss.SecondsBehindMaster.Int64 > 0 {
-		if ss.SecondsBehindMaster.Int64 > server.ClusterGroup.Conf.FailMaxDelay && server.ClusterGroup.Conf.RplChecks == true {
+	if ss.SecondsBehindMain.Int64 > 0 {
+		if ss.SecondsBehindMain.Int64 > server.ClusterGroup.Conf.FailMaxDelay && server.ClusterGroup.Conf.RplChecks == true {
 			if server.IsRelay == false && server.IsMaxscale == false {
-				server.State = stateSlaveLate
+				server.State = stateSubordinateLate
 			} else if server.IsRelay {
 				server.State = stateRelayLate
 			}
 
 		} else {
 			if server.IsRelay == false && server.IsMaxscale == false {
-				server.State = stateSlave
+				server.State = stateSubordinate
 			} else if server.IsRelay {
 				server.State = stateRelay
 			}
 		}
-		return "Behind master"
+		return "Behind main"
 	}
 	if server.IsRelay == false && server.IsMaxscale == false {
-		server.State = stateSlave
+		server.State = stateSubordinate
 	} else if server.IsRelay {
 		server.State = stateRelayLate
 	}
 	return "Running OK"
 }
 
-// CheckSlaveSettings check slave variables & enforce if set
-func (server *ServerMonitor) CheckSlaveSettings() {
+// CheckSubordinateSettings check subordinate variables & enforce if set
+func (server *ServerMonitor) CheckSubordinateSettings() {
 	sl := server
-	if server.ClusterGroup.Conf.ForceSlaveSemisync && sl.HaveSemiSync == false {
-		server.ClusterGroup.LogPrintf("DEBUG", "Enforce semisync on slave %s", sl.URL)
+	if server.ClusterGroup.Conf.ForceSubordinateSemisync && sl.HaveSemiSync == false {
+		server.ClusterGroup.LogPrintf("DEBUG", "Enforce semisync on subordinate %s", sl.URL)
 		dbhelper.InstallSemiSync(sl.Conn)
 	} else if sl.IsIgnored() == false && sl.HaveSemiSync == false {
 		server.ClusterGroup.sme.AddState("WARN0048", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["WARN0048"], sl.URL), ErrFrom: "TOPO", ServerUrl: sl.URL})
 	}
 
 	if server.ClusterGroup.Conf.ForceBinlogRow && sl.HaveBinlogRow == false {
-		// In non-multimaster mode, enforce read-only flag if the option is set
+		// In non-multimain mode, enforce read-only flag if the option is set
 		dbhelper.SetBinlogFormat(sl.Conn, "ROW")
-		server.ClusterGroup.LogPrintf("INFO", "Enforce binlog format ROW on slave %s", sl.URL)
+		server.ClusterGroup.LogPrintf("INFO", "Enforce binlog format ROW on subordinate %s", sl.URL)
 	} else if sl.IsIgnored() == false && sl.HaveBinlogRow == false && server.ClusterGroup.Conf.AutorejoinFlashback == true {
 		server.ClusterGroup.sme.AddState("WARN0049", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["WARN0049"], sl.URL), ErrFrom: "TOPO", ServerUrl: sl.URL})
 	}
-	if server.ClusterGroup.Conf.ForceSlaveReadOnly && sl.ReadOnly == "OFF" && !server.ClusterGroup.IsInIgnoredReadonly(server) {
-		// In non-multimaster mode, enforce read-only flag if the option is set
+	if server.ClusterGroup.Conf.ForceSubordinateReadOnly && sl.ReadOnly == "OFF" && !server.ClusterGroup.IsInIgnoredReadonly(server) {
+		// In non-multimain mode, enforce read-only flag if the option is set
 		sl.SetReadOnly()
-		server.ClusterGroup.LogPrintf("INFO", "Enforce read only on slave %s", sl.URL)
+		server.ClusterGroup.LogPrintf("INFO", "Enforce read only on subordinate %s", sl.URL)
 	}
-	if server.ClusterGroup.Conf.ForceSlaveHeartbeat && sl.GetReplicationHearbeatPeriod() > 1 {
-		dbhelper.SetSlaveHeartbeat(sl.Conn, "1", server.ClusterGroup.Conf.MasterConn, server.DBVersion)
-		server.ClusterGroup.LogPrintf("INFO", "Enforce heartbeat to 1s on slave %s", sl.URL)
+	if server.ClusterGroup.Conf.ForceSubordinateHeartbeat && sl.GetReplicationHearbeatPeriod() > 1 {
+		dbhelper.SetSubordinateHeartbeat(sl.Conn, "1", server.ClusterGroup.Conf.MainConn, server.DBVersion)
+		server.ClusterGroup.LogPrintf("INFO", "Enforce heartbeat to 1s on subordinate %s", sl.URL)
 	} else if sl.IsIgnored() == false && sl.GetReplicationHearbeatPeriod() > 1 {
 		server.ClusterGroup.sme.AddState("WARN0050", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["WARN0050"], sl.URL), ErrFrom: "TOPO", ServerUrl: sl.URL})
 	}
-	if server.ClusterGroup.Conf.ForceSlaveGtid && sl.GetReplicationUsingGtid() == "No" {
-		dbhelper.SetSlaveGTIDMode(sl.Conn, "slave_pos", server.ClusterGroup.Conf.MasterConn, server.DBVersion)
-		server.ClusterGroup.LogPrintf("INFO", "Enforce GTID replication on slave %s", sl.URL)
+	if server.ClusterGroup.Conf.ForceSubordinateGtid && sl.GetReplicationUsingGtid() == "No" {
+		dbhelper.SetSubordinateGTIDMode(sl.Conn, "subordinate_pos", server.ClusterGroup.Conf.MainConn, server.DBVersion)
+		server.ClusterGroup.LogPrintf("INFO", "Enforce GTID replication on subordinate %s", sl.URL)
 	} else if sl.IsIgnored() == false && sl.GetReplicationUsingGtid() == "No" {
 		server.ClusterGroup.sme.AddState("WARN0051", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["WARN0051"], sl.URL), ErrFrom: "TOPO", ServerUrl: sl.URL})
 	}
-	if server.ClusterGroup.Conf.ForceSlaveGtidStrict && sl.IsReplicationUsingGtidStrict() == false {
-		dbhelper.SetSlaveGTIDModeStrict(sl.Conn, server.DBVersion)
-		server.ClusterGroup.LogPrintf("INFO", "Enforce GTID strict mode on slave %s", sl.URL)
+	if server.ClusterGroup.Conf.ForceSubordinateGtidStrict && sl.IsReplicationUsingGtidStrict() == false {
+		dbhelper.SetSubordinateGTIDModeStrict(sl.Conn, server.DBVersion)
+		server.ClusterGroup.LogPrintf("INFO", "Enforce GTID strict mode on subordinate %s", sl.URL)
 	} else if sl.IsIgnored() == false && sl.IsReplicationUsingGtidStrict() == false {
 		server.ClusterGroup.sme.AddState("WARN0058", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["WARN0058"], sl.URL), ErrFrom: "TOPO", ServerUrl: sl.URL})
 	}
 
 	if server.ClusterGroup.Conf.ForceSyncInnoDB && sl.HaveInnodbTrxCommit == false {
 		dbhelper.SetSyncInnodb(sl.Conn)
-		server.ClusterGroup.LogPrintf("INFO", "Enforce InnoDB durability on slave %s", sl.URL)
+		server.ClusterGroup.LogPrintf("INFO", "Enforce InnoDB durability on subordinate %s", sl.URL)
 	} else if sl.IsIgnored() == false && sl.HaveInnodbTrxCommit == false {
 		server.ClusterGroup.sme.AddState("WARN0052", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["WARN0052"], sl.URL), ErrFrom: "TOPO", ServerUrl: sl.URL})
 	}
 	if server.ClusterGroup.Conf.ForceBinlogChecksum && sl.HaveChecksum == false {
 		dbhelper.SetBinlogChecksum(sl.Conn)
-		server.ClusterGroup.LogPrintf("INFO", "Enforce checksum on slave %s", sl.URL)
+		server.ClusterGroup.LogPrintf("INFO", "Enforce checksum on subordinate %s", sl.URL)
 	} else if sl.IsIgnored() == false && sl.HaveChecksum == false {
 		server.ClusterGroup.sme.AddState("WARN0053", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["WARN0053"], sl.URL), ErrFrom: "TOPO", ServerUrl: sl.URL})
 	}
 	if server.ClusterGroup.Conf.ForceBinlogSlowqueries && sl.HaveBinlogSlowqueries == false {
 		dbhelper.SetBinlogSlowqueries(sl.Conn)
-		server.ClusterGroup.LogPrintf("INFO", "Enforce log slow queries of replication on slave %s", sl.URL)
+		server.ClusterGroup.LogPrintf("INFO", "Enforce log slow queries of replication on subordinate %s", sl.URL)
 	} else if sl.IsIgnored() == false && sl.HaveBinlogSlowqueries == false {
 		server.ClusterGroup.sme.AddState("WARN0054", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["WARN0054"], sl.URL), ErrFrom: "TOPO", ServerUrl: sl.URL})
 	}
 	if server.ClusterGroup.Conf.ForceBinlogAnnotate && sl.HaveBinlogAnnotate == false && server.IsMariaDB() {
 		dbhelper.SetBinlogAnnotate(sl.Conn)
-		server.ClusterGroup.LogPrintf("INFO", "Enforce annotate on slave %s", sl.URL)
+		server.ClusterGroup.LogPrintf("INFO", "Enforce annotate on subordinate %s", sl.URL)
 	} else if sl.IsIgnored() == false && sl.HaveBinlogAnnotate == false && server.IsMariaDB() {
 		server.ClusterGroup.sme.AddState("WARN0055", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["WARN0055"], sl.URL), ErrFrom: "TOPO", ServerUrl: sl.URL})
 	}
 
 	if server.ClusterGroup.Conf.ForceBinlogCompress && sl.HaveBinlogCompress == false && sl.DBVersion.IsMariaDB() && sl.DBVersion.Major >= 10 && sl.DBVersion.Minor >= 2 {
 		dbhelper.SetBinlogCompress(sl.Conn)
-		server.ClusterGroup.LogPrintf("INFO", "Enforce binlog compression on slave %s", sl.URL)
+		server.ClusterGroup.LogPrintf("INFO", "Enforce binlog compression on subordinate %s", sl.URL)
 	} else if sl.IsIgnored() == false && sl.HaveBinlogCompress == false && sl.DBVersion.IsMariaDB() && sl.DBVersion.Major >= 10 && sl.DBVersion.Minor >= 2 {
 		server.ClusterGroup.sme.AddState("WARN0056", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["WARN0056"], sl.URL), ErrFrom: "TOPO", ServerUrl: sl.URL})
 	}
-	if sl.IsIgnored() == false && sl.HaveBinlogSlaveUpdates == false {
+	if sl.IsIgnored() == false && sl.HaveBinlogSubordinateUpdates == false {
 		server.ClusterGroup.sme.AddState("WARN0057", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["WARN0057"], sl.URL), ErrFrom: "TOPO", ServerUrl: sl.URL})
 	}
 
@@ -227,51 +227,51 @@ func (server *ServerMonitor) CheckSlaveSettings() {
 
 }
 
-// CheckMasterSettings check master variables & enforce if set
-func (server *ServerMonitor) CheckMasterSettings() {
-	if server.ClusterGroup.Conf.ForceSlaveSemisync && server.HaveSemiSync == false {
-		server.ClusterGroup.LogPrintf("INFO", "Enforce semisync on Master %s", server.URL)
+// CheckMainSettings check main variables & enforce if set
+func (server *ServerMonitor) CheckMainSettings() {
+	if server.ClusterGroup.Conf.ForceSubordinateSemisync && server.HaveSemiSync == false {
+		server.ClusterGroup.LogPrintf("INFO", "Enforce semisync on Main %s", server.URL)
 		dbhelper.InstallSemiSync(server.Conn)
 	} else if server.HaveSemiSync == false {
 		server.ClusterGroup.sme.AddState("WARN0060", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["WARN0060"], server.URL), ErrFrom: "TOPO", ServerUrl: server.URL})
 	}
 	if server.ClusterGroup.Conf.ForceBinlogRow && server.HaveBinlogRow == false {
 		dbhelper.SetBinlogFormat(server.Conn, "ROW")
-		server.ClusterGroup.LogPrintf("INFO", "Enforce binlog format ROW on Master %s", server.URL)
+		server.ClusterGroup.LogPrintf("INFO", "Enforce binlog format ROW on Main %s", server.URL)
 	} else if server.HaveBinlogRow == false && server.ClusterGroup.Conf.AutorejoinFlashback == true {
 		server.ClusterGroup.sme.AddState("WARN0061", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["WARN0061"], server.URL), ErrFrom: "TOPO", ServerUrl: server.URL})
 	}
 	if server.ClusterGroup.Conf.ForceSyncBinlog && server.HaveBinlogSync == false {
 		dbhelper.SetSyncBinlog(server.Conn)
-		server.ClusterGroup.LogPrintf("INFO", "Enforce sync binlog on Master %s", server.URL)
+		server.ClusterGroup.LogPrintf("INFO", "Enforce sync binlog on Main %s", server.URL)
 	} else if server.HaveBinlogSync == false {
 		server.ClusterGroup.sme.AddState("WARN0062", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["WARN0062"], server.URL), ErrFrom: "TOPO", ServerUrl: server.URL})
 	}
 	if server.ClusterGroup.Conf.ForceSyncInnoDB && server.HaveBinlogSync == false {
 		dbhelper.SetSyncInnodb(server.Conn)
-		server.ClusterGroup.LogPrintf("INFO", "Enforce innodb durability on Master %s", server.URL)
+		server.ClusterGroup.LogPrintf("INFO", "Enforce innodb durability on Main %s", server.URL)
 	} else if server.HaveBinlogSync == false {
 		server.ClusterGroup.sme.AddState("WARN0064", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["WARN0064"], server.URL), ErrFrom: "TOPO", ServerUrl: server.URL})
 	}
 	if server.ClusterGroup.Conf.ForceBinlogAnnotate && server.HaveBinlogAnnotate == false && server.IsMariaDB() {
 		dbhelper.SetBinlogAnnotate(server.Conn)
-		server.ClusterGroup.LogPrintf("INFO", "Enforce binlog annotate on master %s", server.URL)
+		server.ClusterGroup.LogPrintf("INFO", "Enforce binlog annotate on main %s", server.URL)
 	} else if server.HaveBinlogAnnotate == false && server.IsMariaDB() {
 		server.ClusterGroup.sme.AddState("WARN0067", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["WARN0067"], server.URL), ErrFrom: "TOPO", ServerUrl: server.URL})
 	}
 	if server.ClusterGroup.Conf.ForceBinlogChecksum && server.HaveChecksum == false {
 		dbhelper.SetBinlogChecksum(server.Conn)
-		server.ClusterGroup.LogPrintf("INFO", "Enforce ckecksum annotate on master %s", server.URL)
+		server.ClusterGroup.LogPrintf("INFO", "Enforce ckecksum annotate on main %s", server.URL)
 	} else if server.HaveChecksum == false {
 		server.ClusterGroup.sme.AddState("WARN0065", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["WARN0065"], server.URL), ErrFrom: "TOPO", ServerUrl: server.URL})
 	}
 	if server.ClusterGroup.Conf.ForceBinlogCompress && server.HaveBinlogCompress == false && server.IsMariaDB() && server.DBVersion.Major >= 10 && server.DBVersion.Minor >= 2 {
 		dbhelper.SetBinlogCompress(server.Conn)
-		server.ClusterGroup.LogPrintf("INFO", "Enforce binlog compression on master %s", server.URL)
+		server.ClusterGroup.LogPrintf("INFO", "Enforce binlog compression on main %s", server.URL)
 	} else if server.HaveBinlogCompress == false && server.DBVersion.IsMariaDB() && server.DBVersion.Major >= 10 && server.DBVersion.Minor >= 2 {
 		server.ClusterGroup.sme.AddState("WARN0068", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["WARN0068"], server.URL), ErrFrom: "TOPO", ServerUrl: server.URL})
 	}
-	if server.HaveBinlogSlaveUpdates == false {
+	if server.HaveBinlogSubordinateUpdates == false {
 		server.ClusterGroup.sme.AddState("WARN0069", state.State{ErrType: "WARNING", ErrDesc: fmt.Sprintf(clusterError["WARN0069"], server.URL), ErrFrom: "TOPO", ServerUrl: server.URL})
 	}
 	if server.HaveGtidStrictMode == false {
@@ -282,12 +282,12 @@ func (server *ServerMonitor) CheckMasterSettings() {
 	}
 }
 
-// CheckSlaveSameMasterGrants check same serers grants as the master
-func (server *ServerMonitor) CheckSlaveSameMasterGrants() bool {
-	if server.ClusterGroup.GetMaster() == nil || server.IsIgnored() || server.ClusterGroup.Conf.CheckGrants == false {
+// CheckSubordinateSameMainGrants check same serers grants as the main
+func (server *ServerMonitor) CheckSubordinateSameMainGrants() bool {
+	if server.ClusterGroup.GetMain() == nil || server.IsIgnored() || server.ClusterGroup.Conf.CheckGrants == false {
 		return true
 	}
-	for _, user := range server.ClusterGroup.GetMaster().Users {
+	for _, user := range server.ClusterGroup.GetMain().Users {
 		if _, ok := server.Users["'"+user.User+"'@'"+user.Host+"'"]; !ok {
 			server.ClusterGroup.sme.AddState("ERR00056", state.State{ErrType: "ERROR", ErrDesc: fmt.Sprintf(clusterError["ERR00056"], fmt.Sprintf("'%s'@'%s'", user.User, user.Host), server.URL), ErrFrom: "TOPO", ServerUrl: server.URL})
 			return false
@@ -335,7 +335,7 @@ func (server *ServerMonitor) CheckPrivileges() {
 				if err != nil {
 					server.ClusterGroup.SetState("ERR00015", state.State{ErrType: "ERROR", ErrDesc: fmt.Sprintf(clusterError["ERR00015"], server.ClusterGroup.rplUser, sv2.URL, err), ErrFrom: "CONF", ServerUrl: sv2.URL})
 				}
-				if rpriv.Repl_slave_priv == "N" {
+				if rpriv.Repl_subordinate_priv == "N" {
 					server.ClusterGroup.SetState("ERR00007", state.State{ErrType: "ERROR", ErrDesc: clusterError["ERR00007"], ErrFrom: "CONF", ServerUrl: sv2.URL})
 				}
 			}
